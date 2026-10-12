@@ -38,3 +38,22 @@ no-agents restriction, continuous execution, measure-first resources).
   HopReach code reuse (D-003).
 - **Next:** Stage 1 — independent foundation scaffold (contracts, rf-core, web,
   api, ingest, CI, compose isolation, healthz/readyz).
+
+## 2026-10-13 — Stage 1: independent foundation (in progress)
+
+- Monorepo scaffolded (npm workspaces): `packages/contracts` (zod schemas +
+  compute protocol + API DTOs), `packages/rf-core` (clean-room RF engine:
+  geodesic helpers, terrarium DEM decode/sampling, curvature/Fresnel profiles,
+  ITU knife-edge + Deygout diffraction, link budget assessment),
+  `apps/api` (Fastify: /healthz, /readyz, /api/v1/config), `apps/web`
+  (React + Vite shell reading the config endpoint), `apps/ingest` (config
+  skeleton; explicitly performs no DB work yet).
+- Dependencies installed (TypeScript 7.0.2, vitest 5.0.4, vite 8.3.4,
+  fastify, zod, react 19). Package-lock committed.
+- **Gates green:** `npm run typecheck` 5/5 workspaces exit 0 · `npm test`
+  23/23 tests (rf-core 20, api 3) · `npm run build` (web) OK.
+- CI workflow added (`.github/workflows/ci.yml`): install → typecheck → test →
+  build on push/PR.
+- Next in stage: compose isolation (own project/network per D-005) + Dockerfiles,
+  planner DB migrations + fixture backend, secret templates (.env.example).
+

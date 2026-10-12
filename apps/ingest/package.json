@@ -1,0 +1,12 @@
+{
+  "name": "@ukmesh-planner/ingest",
+  "version": "0.1.0-stage1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "dev": "tsx src/main.ts --once",
+    "start": "tsx src/main.ts"
+  }
+}
