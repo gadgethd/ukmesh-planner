@@ -28,3 +28,10 @@ jobs:
 
       - name: Build (all workspaces)
         run: npm run build
+
+  export-fixture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: fixture-test export provisioning SQL
+        run: bash fixtures/source/test-export.sh

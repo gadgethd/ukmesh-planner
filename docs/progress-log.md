@@ -68,3 +68,21 @@ no-agents restriction, continuous execution, measure-first resources).
   grants, rollback. Password flows via env only. Fixture-testing next.
 - Nginx upstream resolution hardened (request-time DNS; survives api restarts).
 
+## Stage 2 — Safe DB snapshots (in progress)
+
+- Source-export provisioning drafted (`db/source-export-provision/`): dedicated
+  `ukmesh_planner_reader` role (read-only transactions, statement/idle/lock
+  timeouts, connection limit 2, no superuser/createdb/createrole/bypassrls),
+  three privacy-filtered views (`public_repeaters_v1`,
+  `public_observed_links_v1`, `visibility_fence_v1`), grants, rollback script.
+- Conservative scan (`fixtures/source/`): synthetic source-shaped fixture +
+  `test-export.sh` — **29/29 checks green**, including member-wide 🚫 exclusion
+  via an alias-only private member, sighting-scoped membership, link filters on
+  both endpoints, reader permission denials (raw tables, writes, DDL) and a
+  full rollback proof.
+- Key finding: functions called from a view execute as the *view user* —
+  `meshcore_canonical_node_id()` inside an export view returned permission
+  denied for the reader. Fixed by using set-based alias joins (migration 037's
+  pattern) in both the export views and the fixture. CI now runs the suite.
+- Next: read-only live pre-checks (object shapes, pre-state snapshot), then
+  apply during a quiet window with the fixture-proven SQL.

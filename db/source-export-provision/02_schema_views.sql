@@ -25,8 +25,14 @@ create schema if not exists planner_export;
 -- Small table in practice (~tens of rows) — cheap to materialize per query.
 create or replace view planner_export.public_repeaters_v1 as
 with private_canonicals as materialized (
-  select distinct meshcore_canonical_node_id(n.node_id) as canonical_id
+  -- Canonical ids of every identity with a private member. Uses the alias
+  -- LEFT JOIN directly rather than meshcore_canonical_node_id(): functions
+  -- called from a view execute as the VIEW USER, and the reader must never
+  -- need raw-table access. (Same set-based pattern as migration 037.)
+  select distinct coalesce(a.canonical_node_id, upper(btrim(n.node_id))) as canonical_id
   from nodes n
+  left join node_identity_aliases a
+    on a.source_node_id = upper(btrim(n.node_id))
   where n.name like '%🚫%'
 )
 select c.node_id          as canonical_id,
