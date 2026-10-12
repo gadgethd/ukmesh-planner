@@ -1,0 +1,110 @@
+# ukmesh-planner — fully separate compose project (same host as live UK Mesh).
+#
+# Isolation rules (decision D-005):
+#   * own project name, own bridge network, own volume, own host port (127.0.0.1-bound)
+#   * ONLY the `ingest` service joins the external meshcore-analytics_default
+#     network (read-only source DB access); it takes a dynamic IP (never static)
+#   * everything else stays on the planner's own network
+#
+# Resource discipline (decision §16.6): every service carries CPU/RAM caps;
+# live UK Mesh always wins. Limits are revisited from measurements at deploy.
+name: ukmesh-planner
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: planner
+      POSTGRES_USER: planner
+      POSTGRES_PASSWORD: ${PLANNER_DB_PASSWORD:?set PLANNER_DB_PASSWORD in the deploy .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/planner-migrations:/docker-entrypoint-initdb.d:ro
+    mem_limit: 512m
+    cpus: "1.0"
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U planner -d planner"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      PLANNER_DB_URL: ${PLANNER_DB_URL:-postgres://planner:${PLANNER_DB_PASSWORD}@db:5432/planner}
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-https://planner.ukmesh.com}
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+    mem_limit: 256m
+    cpus: "0.5"
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${PLANNER_WEB_PORT:-3400}:80"
+    volumes:
+      # Read-only reuse of the existing terrain tile set (D-004).
+      - ${TERRAIN_TILES_PATH:-/home/ben/ukmesh/meshcore-analytics/terrain-tiles}:/terrain-tiles:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    mem_limit: 128m
+    cpus: "0.5"
+    pids_limit: 128
+    security_opt:
+      - no-new-privileges:true
+
+  ingest:
+    build:
+      context: .
+      dockerfile: Dockerfile.ingest
+    restart: unless-stopped
+    environment:
+      SOURCE_DB_READONLY_URL: ${SOURCE_DB_READONLY_URL:?set SOURCE_DB_READONLY_URL in the deploy .env}
+      PLANNER_DB_URL: ${PLANNER_DB_URL:-postgres://planner:${PLANNER_DB_PASSWORD}@db:5432/planner}
+      SNAPSHOT_REFRESH_SECONDS: ${SNAPSHOT_REFRESH_SECONDS:-900}
+      FENCE_CHECK_SECONDS: ${FENCE_CHECK_SECONDS:-30}
+    networks:
+      - default
+      - source
+    mem_limit: 256m
+    cpus: "0.5"
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
+
+  # Planner-owned Cloudflare tunnel (enabled with `--profile tunnel` at deploy).
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run", "--protocol", "http2"]
+    environment:
+      TUNNEL_TOKEN: ${PLANNER_TUNNEL_TOKEN:-}
+    profiles: [tunnel]
+    mem_limit: 64m
+
+networks:
+  default:
+    name: ukmesh-planner_default
+  source:
+    name: meshcore-analytics_default
+    external: true
+
+volumes:
+  pgdata:

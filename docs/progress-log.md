@@ -55,6 +55,16 @@ no-agents restriction, continuous execution, measure-first resources).
 - CI workflow added (`.github/workflows/ci.yml`): install → typecheck → test →
   build on push/PR — **first run green** (actions run 38322465082).
 - `.env.example` secret template added (no values).
-- Remaining for stage exit: compose isolation (own project/network per D-005) +
-  Dockerfiles, planner DB migrations + fixture backend.
+- Container layer verified locally: api/ingest/web images build clean;
+  full E2E on a scratch network — web serves the SPA + /healthz and proxies
+  `/api/v1/config` to the api container (200 OK). `docker compose config`
+  validates (own project, 127.0.0.1-bound port, resource caps; only `ingest`
+  joins the source network per D-005).
+- Planner datastore: `db/planner-migrations/0001_core.sql` + fixture applied on
+  a scratch Postgres 16 — row counts verified; single-published-snapshot guard
+  proven by negative test; re-apply idempotent.
+- Source-export provisioning drafted (`db/source-export-provision/`): reader
+  role (read-only txns, timeouts, connlimit 2), three privacy-filtered views,
+  grants, rollback. Password flows via env only. Fixture-testing next.
+- Nginx upstream resolution hardened (request-time DNS; survives api restarts).
 
