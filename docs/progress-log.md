@@ -1,0 +1,40 @@
+# Progress log — ukmesh-planner
+
+Evidence-backed execution log. Newest entries at the bottom of each stage.
+All timestamps Europe/London (BST = UTC+1 during this build).
+
+## 2026-10-13 — Stage 0: discovery & baseline
+
+**Go received.** Ben: "implement this plan" for
+`~/.hermes/plans/2026-10-12_ukmesh-planner-full-build-plan.md`; §16 decision
+record (repo created, DB provisioning approved, DNS/Cloudflare ours, absolute
+no-agents restriction, continuous execution, measure-first resources).
+
+- **Repo bootstrap.** `gadgethd/ukmesh-planner` cloned (empty, public, `main`);
+  git identity `hermes-gadget`; plan committed as `docs/BUILD-PLAN.md`.
+- **Workspace.** Work root `~/ukmesh-planner-work/` (evidence + STATE.md);
+  GitHub clone of ukmesh at `~/ukmesh-src` (`e0a27db…`, 2026-10-12).
+- **VPS recon 1** (evidence: `recon.out.txt`): 8 vCPU / 22 GiB / 193 GB disk
+  77% used / no swap / load ≈ 9.8; 67 running containers; `meshcore-analytics_default`
+  = 172.30.0.0/24 shared bridge; compose projects mapped.
+- **VPS recon 2** (evidence: `recon2.out.txt`): cloudflared topology (token
+  tunnels, HTTP2 forced); TimescaleDB access via `docker exec … psql -U meshcore`;
+  port map (backend 127.0.0.1:3000, website :3004, app :3003); public health
+  codes (ukmesh.com 200, app.ukmesh.com 200, healthcheck 302, flasher 200);
+  terrain tiles at `~/ukmesh/meshcore-analytics/terrain-tiles` (2.7 GB, z0–12).
+- **VPS-authority steer (Ben, mid-recon).** Use the VPS ukmesh tree where it is
+  ahead of GitHub — confirmed divergent (VPS carries unpushed migrations
+  055/057–060 that define the live DB). Read-only snapshot at
+  `~/ukmesh-vps-snapshot/` (210 MB); per-file diff vs GitHub in
+  `evidence/diff-github-vs-vps.txt`.
+- **DB deep-dive** (evidence: `db-deepdive.out.txt`): PG 16.11 + TimescaleDB
+  2.25.1 (no PostGIS); canonical views, privacy functions, trigger inventory,
+  counts (17,252 identities / 165,015 links / 14,321 links in 30d / 126 private
+  prefixes / visibility generation = 810).
+- **Docs written:** source contract (draft), host inventory, decisions log,
+  privacy threat model skeleton (this commit).
+- **Licence note.** ukmesh repo = MIT; `third_party/hopreach` = AGPL-3.0 +
+  Commons Clause (non-commercial). Decision: clean-room RF implementation, no
+  HopReach code reuse (D-003).
+- **Next:** Stage 1 — independent foundation scaffold (contracts, rf-core, web,
+  api, ingest, CI, compose isolation, healthz/readyz).
