@@ -53,7 +53,8 @@ no-agents restriction, continuous execution, measure-first resources).
 - **Gates green:** `npm run typecheck` 5/5 workspaces exit 0 · `npm test`
   23/23 tests (rf-core 20, api 3) · `npm run build` (web) OK.
 - CI workflow added (`.github/workflows/ci.yml`): install → typecheck → test →
-  build on push/PR.
-- Next in stage: compose isolation (own project/network per D-005) + Dockerfiles,
-  planner DB migrations + fixture backend, secret templates (.env.example).
+  build on push/PR — **first run green** (actions run 38322465082).
+- `.env.example` secret template added (no values).
+- Remaining for stage exit: compose isolation (own project/network per D-005) +
+  Dockerfiles, planner DB migrations + fixture backend.
 
