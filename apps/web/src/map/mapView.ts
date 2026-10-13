@@ -369,6 +369,10 @@ export class MapView {
   setLinks3D(segments: Link3DSegment[]): void {
     this.pendingSegments = segments;
     this.link3d?.setSegments(segments);
+    // Custom layers draw during the map's render pass but do not mark the map
+    // dirty themselves — without this repaint the new geometry stays off
+    // screen until the next pan/zoom (frames are render-on-demand).
+    this.map.triggerRepaint();
   }
 
   /** Tilt the camera for the 3D view; returns the new pitch state. */

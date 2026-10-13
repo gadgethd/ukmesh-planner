@@ -413,3 +413,20 @@ Planner changes (all live):
 - Corrupted name bytes (U+FFFD) stripped from display names.
 - rf-core: MAP_LINK_GREEN/AMBER_THRESHOLD_DB + mapLinkBand() (live map
   semantics), tested.
+
+## 2026-10-13 (night 3) — links visible in ALL views
+
+Two more rendering truths found while verifying after the neighbours-map
+redesign:
+1. Custom layers draw during the render pass but never mark the map dirty —
+   with MapLibre's render-on-demand frames, freshly computed link geometry
+   stayed off-screen until the next pan/zoom. `setLinks3D` now calls
+   `triggerRepaint()`.
+2. Depth-testing buried knife-edge-viable links inside the ridges their
+   straight line crosses (the model can be right *because* of diffraction over
+   the obstruction; the buried line read as "missing"). Links now render with
+   depthTest/depthWrite off — always-visible floating 3D objects; terrain
+   profile detail stays in the Advanced profile view.
+
+Verified: flat view A/B 20,676 changed px (was 0), tilted 16k; the 39-link
+list fans out green/amber to the repeaters.

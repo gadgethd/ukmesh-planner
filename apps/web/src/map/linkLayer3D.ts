@@ -167,6 +167,13 @@ export class Link3DLayer implements CustomLayerInterface {
         linewidth: BAND_WIDTHS[band] ?? this.linewidth,
         transparent: true,
         opacity: 0.95,
+        // Links stay visible as floating 3D objects even where the straight
+        // line passes through a ridge: ITM viability can come from knife-edge
+        // diffraction over the obstruction, so burying the line in the hill
+        // would contradict the model and read as "missing". Terrain profile
+        // detail lives in the advanced profile view; the map shows reach.
+        depthTest: false,
+        depthWrite: false,
       });
       if (canvas) material.resolution.set(canvas.width, canvas.height);
       this.materials.push(material);
