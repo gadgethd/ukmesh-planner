@@ -1,8 +1,15 @@
 /**
- * Simple-journey result sheet: proposed site, antenna height, link summary,
- * top links and honest empty/blocked/no-terrain explanations.
+ * Simple-journey result sheet: proposed site, antenna height, predicted links
+ * and honest empty explanations.
+ *
+ * Link display mirrors the live MeshCore neighbours map (the thing people
+ * actually use): only links at or better than the amber threshold (129.5 dB)
+ * are shown — in the live map's palette, ordered best (lowest loss) first —
+ * and each row reads "● Name · 9.5 km · 111 dB". Non-viable paths are not
+ * shown at all (Ben's rule; also the live map's own behaviour).
  */
 import type { PlannerRepeater } from '@ukmesh-planner/contracts';
+import { mapLinkBand, type MapLinkBand } from '@ukmesh-planner/rf-core';
 import type { AssessedLink } from '../compute/assess.worker.js';
 import type { CoverageDetail } from '../compute/coverage/params.js';
 
@@ -23,22 +30,6 @@ export interface AssessUiState {
   error: string | null;
 }
 
-const CLASS_ORDER: Record<string, number> = {
-  likely: 0,
-  marginal: 1,
-  blocked: 2,
-  unlikely: 3,
-  'unknown-terrain': 4,
-};
-
-const CLASS_LABEL: Record<string, string> = {
-  likely: 'likely',
-  marginal: 'marginal',
-  unlikely: 'unlikely',
-  blocked: 'blocked',
-  'unknown-terrain': 'terrain unknown',
-};
-
 export interface CoverageUiState {
   status: 'idle' | 'running' | 'done' | 'error';
   progress: { done: number; total: number } | null;
@@ -54,9 +45,7 @@ interface Props {
   assess: AssessUiState;
   repeatersById: Map<string, PlannerRepeater>;
   maxRangeKm: number;
-  showAllLinks: boolean;
   canUndo: boolean;
-  onToggleShowAll: (v: boolean) => void;
   onHeightChange: (h: number) => void;
   onClear: () => void;
   onUndo: () => void;
@@ -68,11 +57,28 @@ interface Props {
   onCoverageDetail: (d: CoverageDetail) => void;
 }
 
+/** Strip corrupted bytes some node names carry over the air. */
+function cleanDisplayName(name: string): string {
+  const cleaned = name.replace(/\uFFFD+/g, '').replace(/\s+/g, ' ').trim();
+  return cleaned.length > 0 ? cleaned : name;
+}
+
 const COVERAGE_DETAIL_LABEL: Record<CoverageDetail, string> = {
   low: 'Low',
   medium: 'Medium',
   high: 'High',
 };
+
+/** The live map's display convention: viable links only, best first. */
+function viableLinks(results: AssessedLink[]): Array<{ link: AssessedLink; band: MapLinkBand }> {
+  const out: Array<{ link: AssessedLink; band: MapLinkBand }> = [];
+  for (const r of results) {
+    const band = mapLinkBand(r.itmPathLossDb);
+    if (band !== null) out.push({ link: r, band });
+  }
+  out.sort((a, b) => (a.link.itmPathLossDb ?? 999) - (b.link.itmPathLossDb ?? 999));
+  return out;
+}
 
 export function ResultSheet(props: Props) {
   const { site, assess } = props;
@@ -93,35 +99,7 @@ export function ResultSheet(props: Props) {
     );
   }
 
-  const counts: Record<string, number> = {};
-  for (const r of assess.results) counts[r.classification] = (counts[r.classification] ?? 0) + 1;
-  const drawn = assess.results.filter((r) =>
-    r.classification === 'likely' || r.classification === 'marginal' || r.classification === 'blocked',
-  );
-  const sorted = [...assess.results].sort((a, b) => {
-    const ca = CLASS_ORDER[a.classification] ?? 9;
-    const cb = CLASS_ORDER[b.classification] ?? 9;
-    if (ca !== cb) return ca - cb;
-    return (b.marginDb ?? -999) - (a.marginDb ?? -999);
-  });
-  const top = sorted.slice(0, 12);
-
-  let explanation: string | null = null;
-  if (assess.status === 'done') {
-    const likelyOrMarginal = (counts['likely'] ?? 0) + (counts['marginal'] ?? 0);
-    if (assess.totalWithinRange === 0) {
-      explanation = `No repeaters within the modelled range (${props.maxRangeKm} km).`;
-    } else if (likelyOrMarginal === 0 && (counts['blocked'] ?? 0) > 0) {
-      // SIMPLE-04: terrain blockage must be stated as blockage, never as
-      // "no nodes" — this fires whenever no clear path exists, even though
-      // the blocked links themselves are still drawn.
-      explanation = 'Every path within range is blocked by terrain — try a higher antenna height or a nearby high point.';
-    } else if (likelyOrMarginal === 0 && (counts['unknown-terrain'] ?? 0) > 0) {
-      explanation = 'Terrain data is unavailable along the paths within range — no honest prediction is possible here.';
-    } else if (likelyOrMarginal === 0 && drawn.length === 0) {
-      explanation = 'No clear paths within modelled range.';
-    }
-  }
+  const links = viableLinks(assess.results);
 
   return (
     <section className="sheet" aria-live="polite">
@@ -169,17 +147,36 @@ export function ResultSheet(props: Props) {
 
       {assess.status === 'done' ? (
         <>
-          <div className="chips">
-            {(['likely', 'marginal', 'blocked', 'unlikely', 'unknown-terrain'] as const).map((c) =>
-              (counts[c] ?? 0) > 0 ? (
-                <span key={c} className={`chip chip--${c}`}>
-                  {CLASS_LABEL[c]} <strong>{counts[c]}</strong>
-                </span>
-              ) : null,
-            )}
+          <div className="links-head">
+            <h3>Predicted links ({links.length})</h3>
           </div>
 
-          {explanation ? <p className="explanation">{explanation}</p> : null}
+          {links.length === 0 ? (
+            <p className="explanation">
+              {assess.missingTerrain > 0 && assess.evaluated === assess.missingTerrain
+                ? 'Terrain data is unavailable along the paths within range — no honest prediction is possible here.'
+                : 'No viable links to nearby repeaters — try a higher antenna height or a nearby high point.'}
+            </p>
+          ) : (
+            <ul className="top-links">
+              {links.map(({ link, band }) => {
+                const rep = props.repeatersById.get(link.targetId);
+                return (
+                  <li key={link.targetId}>
+                    <button type="button" className="link-row" onClick={() => props.onFocusRepeater(link.targetId)}>
+                      <span className={`dot dot--${band}`} aria-hidden="true">●</span>
+                      <span className="link-name">
+                        {cleanDisplayName(rep?.name ?? link.name ?? link.targetId.slice(0, 8))}
+                      </span>
+                      <span className="link-meta mono">
+                        {link.distanceKm.toFixed(1)} km &middot; {Math.round(link.itmPathLossDb ?? 0)} dB
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
 
           {assess.evaluated < assess.totalWithinRange ? (
             <p className="muted small">
@@ -187,54 +184,12 @@ export function ResultSheet(props: Props) {
             </p>
           ) : null}
 
-          {assess.missingTerrain > 0 ? (
+          {assess.missingTerrain > 0 && links.length > 0 ? (
             <p className="muted small">
               Missing terrain along {assess.missingTerrain} path{assess.missingTerrain === 1 ? '' : 's'} —
-              reported as “terrain unknown”, never as a green link.
+              those paths are excluded, never shown as a link.
             </p>
           ) : null}
-
-          {top.length > 0 ? (
-            <ul className="top-links">
-              {top.map((r) => {
-                const rep = props.repeatersById.get(r.targetId);
-                return (
-                  <li key={r.targetId}>
-                    <button type="button" className="link-row" onClick={() => props.onFocusRepeater(r.targetId)}>
-                      <span className={`dot dot--${r.classification}`} aria-hidden="true" />
-                      <span className="link-name">{rep?.name ?? r.name ?? r.targetId.slice(0, 8)}</span>
-                      <span className="muted mono">{r.distanceKm.toFixed(1)} km</span>
-                      <span
-                        className="muted mono"
-                        title="ITM path loss — the same model the live UK Mesh system uses for neighbour links"
-                      >
-                        {r.itmPathLossDb !== null
-                          ? `${r.itmPathLossDb.toFixed(0)} dB`
-                          : r.marginDb !== null
-                            ? `${r.marginDb.toFixed(0)} dB`
-                            : '—'}
-                      </span>
-                      {r.itmViable !== null ? (
-                        <span className={`chip chip--itm-${r.itmBand ?? 'red'}`}>
-                          {r.itmViable ? 'viable' : 'not viable'}
-                        </span>
-                      ) : null}
-                      <span className={`chip chip--${r.classification}`}>{CLASS_LABEL[r.classification]}</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : null}
-
-          <label className="showall">
-            <input
-              type="checkbox"
-              checked={props.showAllLinks}
-              onChange={(e) => props.onToggleShowAll(e.target.checked)}
-            />
-            Show blocked links (red)
-          </label>
 
           <div className="coverage-block">
             <label className="showall">
@@ -291,8 +246,8 @@ export function ResultSheet(props: Props) {
 
           <p className="muted small">
             {assess.elapsedMs !== null ? `Evaluated in ${Math.round(assess.elapsedMs)} ms. ` : ''}
-            Predictions use the documented RF model (868 MHz · 22 dBm · assumed 2 m AGL) over
-            OS Terrain 50 — a model, not a survey.
+            Same ITM model as the live network (868 MHz · 22 dBm · antenna {site.antennaHeightAglM} m AGL)
+            over OS Terrain 50 — a model, not a survey.
           </p>
         </>
       ) : null}

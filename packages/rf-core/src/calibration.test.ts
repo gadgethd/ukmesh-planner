@@ -3,6 +3,9 @@ import {
   calibrateFromObservedLinks,
   pathLossBand,
   weightedQuantile,
+  mapLinkBand,
+  MAP_LINK_AMBER_THRESHOLD_DB,
+  MAP_LINK_GREEN_THRESHOLD_DB,
   DEFAULT_USABLE_PATH_LOSS_DB,
 } from './calibration.js';
 
@@ -49,5 +52,23 @@ describe('link calibration (live-system mirror)', () => {
     expect(pathLossBand(110, cal)).toBe('green');
     expect(pathLossBand(125, cal)).toBe('amber');
     expect(pathLossBand(135, cal)).toBe('red');
+  });
+});
+
+describe('live neighbours-map link bands', () => {
+  it('matches the live map constants (121.5 / 129.5)', () => {
+    expect(MAP_LINK_GREEN_THRESHOLD_DB).toBe(121.5);
+    expect(MAP_LINK_AMBER_THRESHOLD_DB).toBe(129.5);
+  });
+
+  it('bands green/amber and hides anything worse', () => {
+    expect(mapLinkBand(80)).toBe('green');
+    expect(mapLinkBand(121.5)).toBe('green');
+    expect(mapLinkBand(121.51)).toBe('amber');
+    expect(mapLinkBand(129.5)).toBe('amber');
+    expect(mapLinkBand(129.51)).toBeNull();
+    expect(mapLinkBand(137)).toBeNull();
+    expect(mapLinkBand(null)).toBeNull();
+    expect(mapLinkBand(Number.NaN)).toBeNull();
   });
 });

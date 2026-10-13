@@ -23,6 +23,29 @@ export interface LinkCalibration {
   samples: number;
 }
 
+/**
+ * Live neighbours-map link thresholds (analytics frontend mapConfig.ts).
+ * The live map draws green <= 121.5 dB and amber <= 129.5 dB, and treats
+ * anything above the amber threshold as not viable — it is never drawn.
+ * The planner mirrors this exactly (Ben's rule: non-viable links are not
+ * shown at all).
+ */
+export const MAP_LINK_GREEN_THRESHOLD_DB = 121.5;
+export const MAP_LINK_AMBER_THRESHOLD_DB = 129.5;
+
+export type MapLinkBand = 'green' | 'amber';
+
+/**
+ * Band a modelled path loss exactly like the live neighbours map, or null
+ * when the link must not be drawn at all (> amber threshold).
+ */
+export function mapLinkBand(pathLossDb: number | null): MapLinkBand | null {
+  if (pathLossDb === null || !Number.isFinite(pathLossDb)) return null;
+  if (pathLossDb <= MAP_LINK_GREEN_THRESHOLD_DB) return 'green';
+  if (pathLossDb <= MAP_LINK_AMBER_THRESHOLD_DB) return 'amber';
+  return null;
+}
+
 /** Live-system constants (rf/config.py). */
 export const DEFAULT_USABLE_PATH_LOSS_DB = 137.5;
 export const CALIBRATION_MIN_LINKS = 24;

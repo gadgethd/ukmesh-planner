@@ -26,14 +26,24 @@ export interface Link3DLayerOptions {
 }
 
 const DEFAULT_COLORS: Record<string, string> = {
-  likely: '#15803d',
-  marginal: '#d97706',
-  blocked: '#dc2626',
-  'unknown-terrain': '#9333ea',
-  // MeshCore-convention ITM bands (same palette as the live system).
-  green: '#15803d',
-  amber: '#d97706',
-  red: '#dc2626',
+  likely: '#22c55e',
+  marginal: '#fbbf24',
+  blocked: '#ef4444',
+  'unknown-terrain': '#9ca3af',
+  // Live neighbours-map palette (frontend mapConfig.ts linkGood/linkMarginal).
+  green: '#22c55e',
+  amber: '#fbbf24',
+  red: '#ef4444',
+};
+
+/** Live neighbours-map line widths (geojsonBuilders.ts): green 3, amber 2.1. */
+const BAND_WIDTHS: Record<string, number> = {
+  green: 3,
+  amber: 2.1,
+  likely: 3,
+  marginal: 2.1,
+  blocked: 1.4,
+  red: 1.4,
 };
 
 export class Link3DLayer implements CustomLayerInterface {
@@ -47,8 +57,8 @@ export class Link3DLayer implements CustomLayerInterface {
   private failed = false;
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.Camera();
-  private mesh: LineSegments2 | null = null;
-  private material: LineMaterial | null = null;
+  private meshes: LineSegments2[] = [];
+  private materials: LineMaterial[] = [];
   private segments: Link3DSegment[] = [];
   private origin: SceneOrigin | null = null;
   private readonly exaggeration: number;
@@ -108,12 +118,13 @@ export class Link3DLayer implements CustomLayerInterface {
   }
 
   private disposeMesh(): void {
-    if (!this.mesh) return;
-    this.scene.remove(this.mesh);
-    this.mesh.geometry.dispose();
-    this.material?.dispose();
-    this.mesh = null;
-    this.material = null;
+    for (const mesh of this.meshes) {
+      this.scene.remove(mesh);
+      mesh.geometry.dispose();
+    }
+    for (const material of this.materials) material.dispose();
+    this.meshes = [];
+    this.materials = [];
   }
 
   private rebuild(): void {
@@ -126,38 +137,48 @@ export class Link3DLayer implements CustomLayerInterface {
     // anchor so the scene transform only changes when the site moves.
     const anchor = this.segments[0]!.a;
     const origin = sceneOrigin(anchor.lon, anchor.lat);
-    const positions: number[] = [];
-    const colors: number[] = [];
-    const c = new THREE.Color();
+    // Group segments by classification so each band gets the live map's
+    // line width (green 3 px, amber 2.1 px, red 1.4 px).
+    const byBand = new Map<string, Link3DSegment[]>();
     for (const seg of this.segments) {
-      for (const p of [seg.a, seg.b]) {
-        const [x, y, z] = sceneOffset(origin, p, this.exaggeration);
-        positions.push(x, y, z);
-        c.set(this.colors[seg.classification] ?? this.colors['unknown-terrain']!);
-        colors.push(c.r, c.g, c.b);
+      const key = seg.classification;
+      const list = byBand.get(key);
+      if (list) list.push(seg);
+      else byBand.set(key, [seg]);
+    }
+    const canvas = this.map?.getCanvas();
+    for (const [band, segs] of byBand) {
+      const positions: number[] = [];
+      const colors: number[] = [];
+      const c = new THREE.Color();
+      for (const seg of segs) {
+        for (const p of [seg.a, seg.b]) {
+          const [x, y, z] = sceneOffset(origin, p, this.exaggeration);
+          positions.push(x, y, z);
+          c.set(this.colors[band] ?? this.colors['unknown-terrain']!);
+          colors.push(c.r, c.g, c.b);
+        }
       }
+      const geometry = new LineSegmentsGeometry();
+      geometry.setPositions(positions);
+      geometry.setColors(colors);
+      const material = new LineMaterial({
+        vertexColors: true,
+        linewidth: BAND_WIDTHS[band] ?? this.linewidth,
+        transparent: true,
+        opacity: 0.95,
+      });
+      if (canvas) material.resolution.set(canvas.width, canvas.height);
+      this.materials.push(material);
+      const mesh = new LineSegments2(geometry, material);
+      // Fat-line geometry stores positions in instanced attributes, so
+      // three's bounding-sphere frustum test collapses to the origin of the
+      // mercator world and culls the whole mesh. These are map-space objects
+      // rendered through MapLibre's own matrix; skip three's culling.
+      mesh.frustumCulled = false;
+      this.meshes.push(mesh);
+      this.scene.add(mesh);
     }
-    const geometry = new LineSegmentsGeometry();
-    geometry.setPositions(positions);
-    geometry.setColors(colors);
-    const material = new LineMaterial({
-      vertexColors: true,
-      linewidth: this.linewidth,
-      transparent: true,
-      opacity: 0.95,
-    });
-    if (this.map) {
-      material.resolution.set(this.map.getCanvas().width, this.map.getCanvas().height);
-    }
-    this.material = material;
-    this.mesh = new LineSegments2(geometry, material);
-    // Fat-line geometry stores positions in instanced attributes, so three's
-    // bounding-sphere frustum test collapses to the origin of the mercator
-    // world — far outside the camera frustum — and culls the whole mesh.
-    // These are map-space objects rendered through MapLibre's own matrix;
-    // skip three's culling entirely.
-    this.mesh.frustumCulled = false;
-    this.scene.add(this.mesh);
     this.origin = origin;
   }
 
@@ -165,7 +186,7 @@ export class Link3DLayer implements CustomLayerInterface {
     if (!this.renderer || !this.map || !this.origin || this.failed) return;
     try {
       const canvas = this.map.getCanvas();
-      this.material?.resolution.set(canvas.width, canvas.height);
+      for (const material of this.materials) material.resolution.set(canvas.width, canvas.height);
       const s = this.origin.unitsPerMetre;
       // MapLibre v6: custom layers project through
       // `defaultProjectionData.mainMatrix`, which takes mercator [0..1]

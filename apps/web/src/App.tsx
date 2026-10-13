@@ -13,7 +13,7 @@ import {
   type RfSettings,
   type SnapshotMeta,
 } from '@ukmesh-planner/contracts';
-import { haversineDistanceM } from '@ukmesh-planner/rf-core';
+import { haversineDistanceM, mapLinkBand } from '@ukmesh-planner/rf-core';
 import type { FeatureCollection, LineString } from 'geojson';
 import { MapView } from './map/mapView.js';
 import { ComputeClient } from './compute/client.js';
@@ -76,7 +76,6 @@ export function App() {
   const [site, setSite] = useState<SiteState | null>(null);
   const [undoStack, setUndoStack] = useState<SiteState[]>([]);
   const [assess, setAssess] = useState<AssessUiState>(EMPTY_ASSESS);
-  const [showAllLinks, setShowAllLinks] = useState(false);
   const [is3d, setIs3d] = useState(false);
   const calibrationRef = useRef<{ usablePathLossDb: number } | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
@@ -209,13 +208,40 @@ export function App() {
         .map((r) => ({ r, d: haversineDistanceM({ lat: s.lat, lon: s.lon }, { lat: r.lat, lon: r.lon }) }))
         .filter((x) => x.d <= rf.maxRangeKm * 1000)
         .sort((a, b) => a.d - b.d);
-      const candidates = within.slice(0, MAX_EVALUATED).map((x) => ({
+      // Identity aliases (the same physical node under several keys, often
+      // with corrupted name bytes) would otherwise flood the link list — the
+      // live system merges aliases; do the same, two passes:
+      //   1. same name within ~110 m (alias pins of one site);
+      //   2. brokered/duplicated records at the exact same position (~11 m).
+      // Keep the cleanest-named representative for each cluster.
+      type Scored = { r: PlannerRepeater; d: number };
+      const aliasScore = (r: PlannerRepeater): number =>
+        (r.name && !r.name.includes('\uFFFD') ? 1_000_000 : 0) + (r.name?.length ?? 0);
+      const cleanKey = (name: string): string =>
+        name.replace(/\uFFFD+/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+      const mergeInto = (map: Map<string, Scored>, key: string, x: Scored): void => {
+        const prev = map.get(key);
+        if (!prev || aliasScore(x.r) > aliasScore(prev.r)) map.set(key, x);
+      };
+      let pass: Scored[] = within;
+      if (within.some((x) => x.r.name)) {
+        const byName = new Map<string, Scored>();
+        for (const x of within) {
+          if (x.r.name) mergeInto(byName, `${cleanKey(x.r.name)}|${x.r.lat.toFixed(3)}|${x.r.lon.toFixed(3)}`, x);
+          else mergeInto(byName, `anon|${x.r.canonicalId}`, x);
+        }
+        pass = [...byName.values()];
+      }
+      const byPos = new Map<string, Scored>();
+      for (const x of pass) mergeInto(byPos, `${x.r.lat.toFixed(4)}|${x.r.lon.toFixed(4)}`, x);
+      const deduped = [...byPos.values()].sort((a, b) => a.d - b.d);
+      const candidates = deduped.slice(0, MAX_EVALUATED).map((x) => ({
         id: x.r.canonicalId,
         name: x.r.name,
         lat: x.r.lat,
         lon: x.r.lon,
       }));
-      const total = within.length;
+      const total = deduped.length;
       setAssess((prev) => ({ ...prev, status: 'running', totalWithinRange: total, evaluated: candidates.length }));
 
       const handle = client.startAssess(
@@ -380,16 +406,11 @@ export function App() {
     if (!site) return [];
     const siteAltM = (assess.siteElevationM ?? 0) + site.antennaHeightAglM;
     return assess.results
-      .filter((r) => {
-        // MeshCore-convention default: viable links only. Non-viable paths
-        // (terrain-blocked or too much path loss) appear on request.
-        if (r.itmViable === true) return true;
-        if (r.itmViable === null && (r.classification === 'likely' || r.classification === 'marginal')) {
-          return true;
-        }
-        return showAllLinks;
-      })
       .map((r) => {
+        // Live neighbours-map rule: green (<=121.5 dB) and amber (<=129.5 dB)
+        // only — anything worse is never drawn at all.
+        const band = mapLinkBand(r.itmPathLossDb);
+        if (band === null) return null;
         const rep = repeatersById.get(r.targetId);
         if (!rep) return null;
         return {
@@ -399,12 +420,11 @@ export function App() {
             lat: rep.lat,
             altM: (r.targetGroundM ?? assess.siteElevationM ?? 0) + rf.rxHeightAglM,
           },
-          // Colour by the live system's own bands when available.
-          classification: r.itmBand ?? r.classification,
+          classification: band,
         };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
-  }, [site, assess.results, assess.siteElevationM, showAllLinks, repeatersById, rf.rxHeightAglM]);
+  }, [site, assess.results, assess.siteElevationM, repeatersById, rf.rxHeightAglM]);
 
   useEffect(() => {
     viewRef.current?.setLinks3D(linkSegments);
@@ -849,9 +869,7 @@ export function App() {
         assess={assess}
         repeatersById={repeatersById}
         maxRangeKm={rf.maxRangeKm}
-        showAllLinks={showAllLinks}
         canUndo={undoStack.length > 0}
-        onToggleShowAll={setShowAllLinks}
         onHeightChange={changeHeight}
         onClear={clearSite}
         onUndo={undo}

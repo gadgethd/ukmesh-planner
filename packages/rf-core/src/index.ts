@@ -25,7 +25,11 @@ export {
   calibrateFromObservedLinks,
   pathLossBand,
   weightedQuantile,
+  mapLinkBand,
   DEFAULT_USABLE_PATH_LOSS_DB,
+  MAP_LINK_GREEN_THRESHOLD_DB,
+  MAP_LINK_AMBER_THRESHOLD_DB,
   type CalibrationInput,
   type LinkCalibration,
+  type MapLinkBand,
 } from './calibration.js';

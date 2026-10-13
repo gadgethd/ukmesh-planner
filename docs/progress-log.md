@@ -383,3 +383,33 @@ Live verification after fixes: map renders (tiles), ITM rows + viable chips
 populate, 7-9 viable links draw and A/B-diff (121 px), tilt applies
 (230k px frame change, pitch 55), calibration served (139.5/130, 37,284
 samples). Commit 24c012e.
+
+## 2026-10-13 (night 2) — neighbour display matched to the live MeshCore app
+
+Ben's feedback: "not viable links needs to not be shown at all, also its still
+not like the meshcore app with the db's, also the ui with likely blocked is a
+fucking mess".
+
+Studied the live app source (meshcore-analytics frontend) — the neighbours
+map's conventions, now mirrored exactly:
+- **mapConfig.ts**: green <= 121.5 dB, amber <= 129.5 dB; nothing worse is
+  ever drawn (the map's own `itm_viable = path_loss <= 129.5`).
+- **geojsonBuilders.ts**: line widths 3 / 2.1 px; palette #22c55e / #fbbf24.
+- **PlannedRepeaterPopup.tsx**: rows "● Name · 9.5 km · 111 dB", dot coloured
+  by band; empty state "No viable links to nearby repeaters".
+- Planned links list = viable only, ordered best (lowest loss) first.
+
+Planner changes (all live):
+- Map: only green/amber links (<= 129.5 dB) ever render; red/non-viable are
+  gone entirely — no toggle.
+- Results sheet: likely/blocked chips, viability chips, the blocked toggle
+  and the counts summary are all removed; rows are the live-app format;
+  panel title "Predicted links (N)"; better empty states.
+- Link3DLayer: live palette + per-band line widths (3 / 2.1).
+- Identity aliases (the same node under several keys, common in the source
+  data with corrupted name bytes) are merged for the link list — same name
+  within ~110 m, then exact-position duplicates; cleanest name kept. Link
+  list at the Crathorne test point: 53 -> 39 rows, no more 10x TS17 repeats.
+- Corrupted name bytes (U+FFFD) stripped from display names.
+- rf-core: MAP_LINK_GREEN/AMBER_THRESHOLD_DB + mapLinkBand() (live map
+  semantics), tested.

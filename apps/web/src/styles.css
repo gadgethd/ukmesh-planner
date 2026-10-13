@@ -345,3 +345,13 @@ label:focus-visible {
 .chip--itm-green { background: #dcfce7; color: #166534; }
 .chip--itm-amber { background: #fef3c7; color: #92400e; }
 .chip--itm-red { background: #fee2e2; color: #991b1b; }
+
+/* ---------- predicted-link rows (live neighbours-map palette) ---------- */
+.dot--green { color: #22c55e; }
+.dot--amber { color: #fbbf24; }
+.dot--likely { color: #22c55e; }
+.dot--marginal { color: #fbbf24; }
+.dot--blocked { color: #ef4444; }
+.links-head { display: flex; align-items: baseline; justify-content: space-between; margin: 10px 0 4px; }
+.links-head h3 { margin: 0; font-size: 14px; }
+.link-meta { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
