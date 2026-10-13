@@ -303,3 +303,29 @@ no-agents restriction, continuous execution, measure-first resources).
   surveys, scenario history, viewshed-vs-existing delta) remain deferred and
   are tracked for Stage 6/7 polish; the exit gate itself (MODES/ADV tests,
   RF suite, deterministic candidate fixtures with explainable rank) is met.
+
+## 2026-10-13 — Stage 7: production staging, rollout and verification
+
+- **Released `bb85db4`** (previous release `66b1182` kept as the tagged
+  rollback target). Images tagged per-SHA on the host; compose project
+  `ukmesh-planner` unchanged in shape (own network/volume, 127.0.0.1:3400).
+- **Staged public URL live: `https://ukmesh-planner.justarobot.uk`** — own
+  cloudflared tunnel (`cf-tunnel-ukmesh-planner`, http2, token-managed via
+  the CF API), DNS CNAME created in `justarobot.uk`; verified 200 + full
+  browser E2E (assess 75/225, coverage auto-selected **wasm**, advanced
+  topology) through the public edge. Evidence `evidence/stage7/`.
+- **`planner.ukmesh.com` publish BLOCKED (recorded):** the host CF token is
+  scoped to `justarobot.uk` only; ukmesh.com's tunnel is dashboard-managed.
+  Exact remedies in `docs/deployment-report.md` → Blockers.
+- **Pre/post UK Mesh health:** ukmesh.com / app / healthcheck / flasher all
+  match the Stage-0 baseline (200/200/302/200); resources within variance.
+- **Rollback executed and verified:** deploy `66b1182` → config reverts to
+  two tiers → roll forward `bb85db4` → three tiers; public healthz ok.
+- **Backup/restore verified:** pg_dump 15.3 MB → scratch restore → counts
+  identical (6 / 52,794 / 222,601 / 3) → scratch dropped; dump retained at
+  `/home/ben/backups/ukmesh-planner/`.
+- **Incident + fix:** an `rsync --delete` wiped the host deploy `.env` during
+  the rollback test (running stack unaffected); reconstructed from container
+  env, 0600, validated; runbook updated to ban `--delete`.
+- **Docs:** `docs/deployment-report.md`, `docs/operations/deploy-runbook.md`.
+- **CI:** green on every push (latest run 38350492669).
