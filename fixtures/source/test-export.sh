@@ -93,6 +93,7 @@ allow "reader SELECTs public_repeaters_v1"      "3" "select count(*) from planne
 allow "reader SELECTs public_observed_links_v1" "2" "select count(*) from planner_export.public_observed_links_v1;"
 allow "reader SELECTs visibility_fence_v1"      "810" "select generation from planner_export.visibility_fence_v1;"
 allow "reader transactions are read-only"       "on" "show default_transaction_read_only;"
+allow "reader defaults to hash joins"           "off" "show enable_nestloop;"
 deny  "reader CANNOT read raw nodes"            "select count(*) from nodes;"
 deny  "reader CANNOT read raw node_links"       "select count(*) from node_links;"
 deny  "reader CANNOT insert into views"         "insert into planner_export.visibility_fence_v1 (generation) values (1);"

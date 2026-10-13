@@ -24,3 +24,8 @@ alter role ukmesh_planner_reader set idle_in_transaction_session_timeout = '15s'
 alter role ukmesh_planner_reader set lock_timeout = '3s';
 alter role ukmesh_planner_reader connection limit 2;
 alter role ukmesh_planner_reader nosuperuser nocreatedb nocreaterole nobypassrls;
+
+-- Planner-plan safety: the canonical views carry weak row estimates and any
+-- nested-loop plan over them degrades pathologically (measured 389s vs 0.5s
+-- for the links view). Force hash/merge joins for every reader session.
+alter role ukmesh_planner_reader set enable_nestloop = off;

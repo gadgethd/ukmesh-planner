@@ -147,3 +147,30 @@ introspection (`evidence/db-deepdive.out.txt`).
 3. `EXPLAIN` the two export views against live data (read-only, bounded).
 4. Confirm matview refresh ownership stays solely with the existing cron.
 5. Byte-budget / freshness details of `/api/nodes/map` cross-check only.
+
+## Reader & query contract — as applied 2026-10-13
+
+- Role `ukmesh_planner_reader`: LOGIN (password lives only in the host env
+  file, mode 0600), `default_transaction_read_only=on`, `statement_timeout=10s`,
+  `idle_in_transaction_session_timeout=15s`, `lock_timeout=3s`, connection
+  limit 2, no superuser/createdb/createrole/bypassrls, and
+  `enable_nestloop=off` as a session default.
+- Views: `planner_export.public_repeaters_v1`,
+  `planner_export.public_observed_links_v1`,
+  `planner_export.visibility_fence_v1`. Maintenance: CREATE OR REPLACE only;
+  grants = USAGE on schema + SELECT on those three views.
+- Why `enable_nestloop=off`: row estimates on `node_identity_nodes` collapse to
+  ~1 row, so a nested-loop plan over the links view explodes (~389,000ms vs
+  513ms measured). The role default makes every reader session safe; the
+  ingester additionally issues `SET LOCAL enable_nestloop = off` per
+  transaction as belt-and-braces.
+- Measured cost (2026-10-13, under steady hopreach load): repeaters ~296ms,
+  links ~513ms, fence ~6ms. Counts at apply: 8,797 repeaters / 37,075 links.
+- Ingest transport: host `meshcore-infra-timescaledb-1` (alias `timescaledb`)
+  on docker network `meshcore-analytics_default` (172.30.0.0/24), port 5432,
+  scram. The port is published only on the host's 127.0.0.1 — never public.
+- Privacy sources enforced: the 🚫 name marker AND the
+  `private_node_prefixes` registry, applied member-wide across canonical
+  identities (stricter than the site's per-row minimum).
+- Rollback: `db/source-export-provision/99_rollback.sql` — additive removal
+  only, no source data touched.

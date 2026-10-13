@@ -110,7 +110,7 @@ alter view planner_export.public_observed_links_v1 set (security_barrier = true)
 comment on view planner_export.public_repeaters_v1 is
   'Planner export v1 — public repeaters (role=2, positioned, ukmesh scope, member-wide privacy). Idempotent CREATE OR REPLACE only.';
 comment on view planner_export.public_observed_links_v1 is
-  'Planner export v1 — observed links whose BOTH endpoints are published repeaters. Query-time note: the session should SET enable_nestloop=off (canonical-view estimates are weak on this schema; nested-loop plans are pathologically slow).';
+  'Planner export v1 — observed links whose BOTH endpoints are published repeaters. Reads rely on the reader role default enable_nestloop=off (set on the role); canonical-view estimates are weak and a nested-loop plan is ~1000x slower (measured 389s vs 0.5s).';
 
 -- Access: exactly USAGE + SELECT-on-these-three for the reader; nothing public.
 revoke all on schema planner_export from public;

@@ -86,3 +86,20 @@ no-agents restriction, continuous execution, measure-first resources).
   pattern) in both the export views and the fixture. CI now runs the suite.
 - Next: read-only live pre-checks (object shapes, pre-state snapshot), then
   apply during a quiet window with the fixture-proven SQL.
+
+- **Live provisioning applied 2026-10-13 00:04–00:16 UTC** (quiet window: load
+  4.8, 2 active queries, gen 810): `ukmesh_planner_reader` role +
+  `planner_export` schema/views created (rc=0 both). Post-checks: 0 waiting
+  locks, generation unchanged, ukmesh.com 200, backend + timescaledb healthy.
+- Reader verified over the exact ingest path (bridge DNS name, scram):
+  repeaters=8,797 (8,798 minutes later as live data drifted), links=37,075,
+  fence=810; write/DDL/raw-table probes all denied.
+- Plan-safety experiments (why the view is the shape it is): join-form with
+  nested loops enabled = 389s (double nested loop from CTE estimates
+  collapsing to rows=1); an IN-form rewrite was also plan-unstable (stuck
+  >8 min, terminated). Final: join-form + **role-level `enable_nestloop=off`**
+  → links 513ms / repeaters 296ms / fence 5.6ms under pure defaults.
+- Fixture suite extended (privacy union incl. prefix-registry source,
+  force_viable, reader hash-join default): **32/32 green**.
+- Rollback kept ready: `db/source-export-provision/99_rollback.sql`
+  (drops only the three views + schema + role; touches no source data).
