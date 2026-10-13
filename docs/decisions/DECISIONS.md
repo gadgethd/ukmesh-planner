@@ -2,10 +2,16 @@
 
 Format: `D-nnn — title — decision — rationale — date`.
 
-**D-001 — Zero delegation.** Built entirely in the owning Hermes session; no
-MissionDeck, no subagents, no delegated coding/review agents (plan §16.4,
-explicitly overriding the usual delegation ladder). Ordinary CLI tools,
-scripts, test frameworks and direct tool calls only. — 2026-10-13.
+**D-001 — Delegation policy (amended 2026-10-13 by Ben).** Originally a
+zero-delegation rule (no MissionDeck, no subagents, no delegated coding/review
+agents). **Ben explicitly lifted it the same day** — "you can use 6.1 sol
+xhigh for anything you need help with ... you can use it explicitly now,
+update your rules" (Codex quota reset 2026-10-13). Standing policy now: the
+standard fleet delegation rules apply — own attempts first, then
+sol@xhigh / MissionDeck escalation per the Sol-escalation ladder when a task
+is not working, quality is below acceptance, or capability is lacking.
+The assistant still owns implementation, verification and acceptance;
+delegated output is reviewed before being trusted. — 2026-10-13 (amended).
 
 **D-002 — VPS working tree is authoritative over GitHub.** The VPS
 `~/ukmesh/meshcore-analytics` tree carries unpushed work (incl. migrations
