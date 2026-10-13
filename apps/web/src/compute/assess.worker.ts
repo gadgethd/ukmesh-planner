@@ -34,6 +34,45 @@ export interface AssessCandidate {
   lon: number;
 }
 
+
+/** Visual clearance held above the ground when the sight ray would clip it. */
+const DRAWN_CLEARANCE_M = 12;
+/** Max drawn points per link (payload + geometry budget). */
+const DRAWN_PATH_POINTS = 24;
+
+/**
+ * Build the drawn 3D path for a link from its sampled profile: the straight
+ * sight ray (hTx -> hRx) wherever it clears the terrain, lifted to
+ * terrain + clearance wherever the ray would be inside a hill. The drawn
+ * line therefore never disappears into the terrain, and the lift is visible
+ * as the line riding over the ridges it has to clear.
+ */
+export function buildDrawnPath(
+  a: { lat: number; lon: number },
+  b: { lat: number; lon: number },
+  profile: { dists: number[]; heights: number[] },
+  hTxM: number,
+  hRxM: number,
+): AssessedPathPoint[] {
+  const n = profile.dists.length;
+  if (n === 0) return [];
+  const dTotal = profile.dists[n - 1] || 1;
+  const step = Math.max(1, Math.ceil(n / DRAWN_PATH_POINTS));
+  const out: AssessedPathPoint[] = [];
+  for (let i = 0; i < n; i += step) {
+    out.push(drawnPoint(i));
+  }
+  if ((n - 1) % step !== 0) out.push(drawnPoint(n - 1));
+  return out;
+
+  function drawnPoint(i: number): AssessedPathPoint {
+    const t = profile.dists[i]! / dTotal;
+    const ray = hTxM + (hRxM - hTxM) * t;
+    const altM = Math.max(ray, profile.heights[i]! + DRAWN_CLEARANCE_M);
+    return { lat: a.lat + t * (b.lat - a.lat), lon: a.lon + t * (b.lon - a.lon), altM };
+  }
+}
+
 export interface AssessRequest {
   type: 'assess';
   jobId: number;
@@ -44,10 +83,25 @@ export interface AssessRequest {
   calibration?: { usablePathLossDb: number };
 }
 
+export interface AssessedPathPoint {
+  lat: number;
+  lon: number;
+  /** Drawn altitude ASL, metres. */
+  altM: number;
+}
+
 export interface AssessedLink extends LinkResult {
   name: string | null;
   /** Ground elevation at the target, for 3D LOS rendering (null = unknown). */
   targetGroundM: number | null;
+  /**
+   * Drawn 3D path for the link (downsampled terrain profile): the straight
+   * sight ray where it clears the terrain, lifted just above the ground
+   * where the ray would clip a hill — so the drawn line is a genuine 3D
+   * object that never disappears into the terrain. Null when terrain was
+   * unavailable.
+   */
+  itmPath: AssessedPathPoint[] | null;
   /**
    * ITM path loss (dB) — the same model the live MeshCore analytics system
    * uses for neighbour links (MeshCore-convention number). Null when terrain
@@ -305,25 +359,29 @@ async function handle(req: AssessRequest): Promise<void> {
       let itmPathLossDb: number | null = null;
       let itmViable: boolean | null = null;
       let itmBand: ItmSignalBand | null = null;
+      let itmPath: AssessedPathPoint[] | null = null;
       if (r.classification !== 'unknown-terrain') {
         const sampled = sampleItmProfile(
           { lat: req.site.lat, lon: req.site.lon },
           { lat: c.lat, lon: c.lon },
           (lat, lon) => provider.elevationAt({ lat, lon }) ?? 0,
         );
+        const hTxM = (siteElevationM ?? 0) + req.site.antennaHeightAglM;
+        const hRxM = (targetGroundM ?? 0) + req.rf.rxHeightAglM;
         const itm = computeItmPathLoss({
           ...sampled,
-          hTxM: (siteElevationM ?? 0) + req.site.antennaHeightAglM,
-          hRxM: (targetGroundM ?? 0) + req.rf.rxHeightAglM,
+          hTxM,
+          hRxM,
           usableThresholdDb: usableThreshold,
         });
         if (Number.isFinite(itm.pathLossDb)) {
           itmPathLossDb = itm.pathLossDb;
           itmViable = itm.viable;
           itmBand = itmSignalBand(itm.pathLossDb, usableThreshold);
+          itmPath = buildDrawnPath(req.site, c, sampled, hTxM, hRxM);
         }
       }
-      results.push({ ...r, name: c.name, targetGroundM, itmPathLossDb, itmViable, itmBand });
+      results.push({ ...r, name: c.name, targetGroundM, itmPathLossDb, itmViable, itmBand, itmPath });
     }
 
     const response: AssessResponse = {

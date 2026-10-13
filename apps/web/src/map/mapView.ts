@@ -28,7 +28,7 @@ import type { FeatureCollection, LineString, Point } from 'geojson';
 import type { PlannerRepeater } from '@ukmesh-planner/contracts';
 import { freshnessBucket, type FreshnessBucket } from '../lib/freshness.js';
 import { CODE_RGBA } from '../compute/coverage/codes.js';
-import { Link3DLayer, type Link3DSegment } from './linkLayer3D.js';
+import { Link3DLayer, type Link3DPath } from './linkLayer3D.js';
 
 export const STYLE_LIGHT = 'https://tiles.openfreemap.org/styles/positron';
 export const STYLE_DARK = 'https://tiles.openfreemap.org/styles/dark';
@@ -85,7 +85,7 @@ export class MapView {
   private overlaysReady = false;
   private repeaterClickBound = false;
   private pendingRepeaters: FeatureCollection<Point> | null = null;
-  private pendingSegments: Link3DSegment[] = [];
+  private pendingPaths: Link3DPath[] = [];
   private link3d: Link3DLayer | null = null;
   private observedClickBound = false;
   private pendingObserved: FeatureCollection<LineString> | null = null;
@@ -278,7 +278,7 @@ export class MapView {
     const present = !!this.map.getLayer('links-3d');
     if (w.__mapLog.length < 80) w.__mapLog.push(`link3d install: present=${present} ready=${this.overlaysReady}`);
     if (!present) {
-      this.link3d.setSegments(this.pendingSegments);
+      this.link3d.setPaths(this.pendingPaths);
       try {
         this.map.addLayer(this.link3d);
         w.__mapLog.push(`link3d added; now=${!!this.map.getLayer('links-3d')}`);
@@ -365,10 +365,10 @@ export class MapView {
     if (src) src.setData(this.pendingRepeaters);
   }
 
-  /** Predicted links as 3D LOS segments (see Link3DLayer). */
-  setLinks3D(segments: Link3DSegment[]): void {
-    this.pendingSegments = segments;
-    this.link3d?.setSegments(segments);
+  /** Predicted links as 3D LOS paths (see Link3DLayer). */
+  setLinks3D(paths: Link3DPath[]): void {
+    this.pendingPaths = paths;
+    this.link3d?.setPaths(paths);
     // Custom layers draw during the map's render pass but do not mark the map
     // dirty themselves — without this repaint the new geometry stays off
     // screen until the next pan/zoom (frames are render-on-demand).

@@ -14,6 +14,7 @@ import {
   type SnapshotMeta,
 } from '@ukmesh-planner/contracts';
 import { haversineDistanceM, mapLinkBand } from '@ukmesh-planner/rf-core';
+import { isActive } from './lib/freshness.js';
 import type { FeatureCollection, LineString } from 'geojson';
 import { MapView } from './map/mapView.js';
 import { ComputeClient } from './compute/client.js';
@@ -35,7 +36,7 @@ import {
   type TopoNode,
 } from './advanced/topology.js';
 import type { CandidateGoal } from './advanced/candidates.js';
-import type { Link3DSegment } from './map/linkLayer3D.js';
+import type { Link3DPath } from './map/linkLayer3D.js';
 import type { Mode, ProfilePair } from './plan/planState.js';
 
 const MAX_EVALUATED = 300;
@@ -130,9 +131,12 @@ export function App() {
         const page = (await repRes.json()) as { items: PlannerRepeater[]; nextCursor: string | null };
         if (cancelled) return;
         setSnapshot(cfg.snapshot);
-        setRepeatersById(new Map(page.items.map((r) => [r.canonicalId, r])));
-        setRepeaterCount(page.items.length);
-        viewRef.current?.setRepeaters(page.items);
+        // Only nodes active on the network recently (Ben, 2026-10-13):
+        // dead repeaters must not appear on the map or in assessments.
+        const active = page.items.filter((r) => isActive(r.lastSeen));
+        setRepeatersById(new Map(active.map((r) => [r.canonicalId, r])));
+        setRepeaterCount(active.length);
+        viewRef.current?.setRepeaters(active);
       } catch (err) {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : String(err));
       }
@@ -402,7 +406,7 @@ export function App() {
   // --- link drawing (3D LOS objects) ---------------------------------------
   // Blocked (red) links are hidden by default — they read as noise over the
   // map; the results sheet toggle reveals them when wanted.
-  const linkSegments = useMemo((): Link3DSegment[] => {
+  const linkSegments = useMemo((): Link3DPath[] => {
     if (!site) return [];
     const siteAltM = (assess.siteElevationM ?? 0) + site.antennaHeightAglM;
     return assess.results
@@ -413,15 +417,20 @@ export function App() {
         if (band === null) return null;
         const rep = repeatersById.get(r.targetId);
         if (!rep) return null;
-        return {
-          a: { lon: site.lon, lat: site.lat, altM: siteAltM },
-          b: {
-            lon: rep.lon,
-            lat: rep.lat,
-            altM: (r.targetGroundM ?? assess.siteElevationM ?? 0) + rf.rxHeightAglM,
-          },
-          classification: band,
-        };
+        // Prefer the worker's terrain-clearing drawn path; fall back to a
+        // straight antenna-to-antenna segment.
+        const points =
+          r.itmPath && r.itmPath.length >= 2
+            ? r.itmPath.map((p) => ({ lon: p.lon, lat: p.lat, altM: p.altM }))
+            : [
+                { lon: site.lon, lat: site.lat, altM: siteAltM },
+                {
+                  lon: rep.lon,
+                  lat: rep.lat,
+                  altM: (r.targetGroundM ?? assess.siteElevationM ?? 0) + rf.rxHeightAglM,
+                },
+              ];
+        return { points, classification: band };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
   }, [site, assess.results, assess.siteElevationM, repeatersById, rf.rxHeightAglM]);
@@ -750,7 +759,7 @@ export function App() {
             <span className="status--error">data load failed: {loadError}</span>
           ) : snapshot ? (
             <span className="muted small">
-              data: gen {snapshot.generation} · {repeaterCount.toLocaleString()} repeaters · fetched {snapshotAge}
+              data: gen {snapshot.generation} · {repeaterCount.toLocaleString()} repeaters active in 14 d · fetched {snapshotAge}
             </span>
           ) : (
             <span className="muted small">loading repeaters…</span>
@@ -789,16 +798,20 @@ export function App() {
           <h3>Existing repeaters</h3>
           <ul>
             <li><span className="swatch" style={{ background: '#15803d' }} /> seen &lt; 24 h</li>
-            <li><span className="swatch" style={{ background: '#65a30d' }} /> seen &lt; 7 d</li>
-            <li><span className="swatch" style={{ background: '#d97706' }} /> seen &lt; 28 d</li>
-            <li><span className="swatch" style={{ background: '#9ca3af' }} /> long-unseen</li>
+            <li><span className="swatch" style={{ background: '#65a30d' }} /> seen &lt; 14 d</li>
           </ul>
+          <p className="muted small">
+            Only repeaters seen on the network in the last 14 days are shown.
+          </p>
           <h3>Predicted links</h3>
           <ul>
-            <li><span className="swatch" style={{ background: '#15803d' }} /> likely</li>
-            <li><span className="swatch" style={{ background: '#d97706' }} /> marginal</li>
-            <li><span className="swatch" style={{ background: '#dc2626' }} /> blocked (hidden unless enabled)</li>
+            <li><span className="swatch" style={{ background: '#22c55e' }} /> strong (≤ 121.5 dB path loss)</li>
+            <li><span className="swatch" style={{ background: '#fbbf24' }} /> marginal (≤ 129.5 dB)</li>
           </ul>
+          <p className="muted small">
+            Weaker paths are not shown. Links are drawn as 3D sight-line objects held clear of the
+            terrain — tilt with the 3D button to see them.
+          </p>
           <p className="muted small">
             Links are drawn as 3D line-of-sight objects at antenna height — tilt with the 3D
             button to see them against the terrain.

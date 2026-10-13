@@ -430,3 +430,24 @@ redesign:
 
 Verified: flat view A/B 20,676 changed px (was 0), tilted 16k; the 39-link
 list fans out green/amber to the repeaters.
+## 2026-10-13 (night 4) — terrain-clearing links, 14-day activity filter, cache fix
+
+Ben: "your lines are literally going into the hill" + "it should only use
+nodes active in the last 14d ... I see a bunch of repeaters there that dont
+exist anymore".
+
+- **Links never enter terrain (structural):** the worker now emits a drawn
+  path per link — the straight sight ray where it clears, lifted to
+  terrain + 12 m wherever the ray would clip a hill (<=24 points, from the
+  same ITM profile). The 3D layer draws these polylines (depth test off), so
+  the line visibly rides UP OVER ridges and can never be inside a hill.
+  Verified in the tilted view: "lines ride up over the high ground and stay
+  visibly above the terrain surface".
+- **14-day activity filter:** only repeaters seen on the network in the last
+  14 days are loaded (map markers, candidates, everything downstream).
+  Live: 8,821 -> 2,739 repeaters; Crathorne candidates 981 -> 252. Topbar
+  and legend updated ("2,739 repeaters active in 14 d"; legend now two
+  freshness classes + the viable/marginal bands).
+- **Stale-bundle fix:** index.html served with Cache-Control: no-cache (the
+  old shell was being cached by browsers, hiding deploys — a likely reason
+  Ben saw the pre-fix behaviour after the fix shipped).

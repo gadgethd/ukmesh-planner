@@ -12,9 +12,9 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap } from 'maplibre-gl';
 import { sceneOffset, sceneOrigin, type LonLatAlt, type SceneOrigin } from './linkMath.js';
 
-export interface Link3DSegment {
-  a: LonLatAlt;
-  b: LonLatAlt;
+export interface Link3DPath {
+  /** Consecutive points of the drawn link (>= 2); joined into 3D segments. */
+  points: LonLatAlt[];
   classification: 'likely' | 'marginal' | 'blocked' | 'unknown-terrain' | string;
 }
 
@@ -59,7 +59,7 @@ export class Link3DLayer implements CustomLayerInterface {
   private readonly camera = new THREE.Camera();
   private meshes: LineSegments2[] = [];
   private materials: LineMaterial[] = [];
-  private segments: Link3DSegment[] = [];
+  private paths: Link3DPath[] = [];
   private origin: SceneOrigin | null = null;
   private readonly exaggeration: number;
   private readonly linewidth: number;
@@ -81,7 +81,7 @@ export class Link3DLayer implements CustomLayerInterface {
       this.renderer = new THREE.WebGLRenderer({ canvas: map.getCanvas(), context: gl });
       this.renderer.autoClear = false;
       this.rebuild();
-      this.log(`link3d onAdd ok (segments=${this.segments.length})`);
+      this.log(`link3d onAdd ok (paths=${this.paths.length})`);
     } catch (err) {
       this.log(`link3d onAdd failed (layer disabled): ${err instanceof Error ? err.message : String(err)}`);
       this.fail();
@@ -112,8 +112,8 @@ export class Link3DLayer implements CustomLayerInterface {
     this.map = null;
   }
 
-  setSegments(segments: Link3DSegment[]): void {
-    this.segments = segments;
+  setPaths(paths: Link3DPath[]): void {
+    this.paths = paths;
     if (this.map) this.rebuild();
   }
 
@@ -129,34 +129,36 @@ export class Link3DLayer implements CustomLayerInterface {
 
   private rebuild(): void {
     this.disposeMesh();
-    if (this.segments.length === 0) {
+    if (this.paths.length === 0) {
       this.origin = null;
       return;
     }
-    // Origin = the proposed site (every segment starts there): a stable
-    // anchor so the scene transform only changes when the site moves.
-    const anchor = this.segments[0]!.a;
+    // Origin = the proposed site (every path starts there): a stable anchor
+    // so the scene transform only changes when the site moves.
+    const anchor = this.paths[0]!.points[0]!;
     const origin = sceneOrigin(anchor.lon, anchor.lat);
-    // Group segments by classification so each band gets the live map's
-    // line width (green 3 px, amber 2.1 px, red 1.4 px).
-    const byBand = new Map<string, Link3DSegment[]>();
-    for (const seg of this.segments) {
-      const key = seg.classification;
+    // Group paths by classification so each band gets the live map's line
+    // width (green 3 px, amber 2.1 px, red 1.4 px).
+    const byBand = new Map<string, Link3DPath[]>();
+    for (const path of this.paths) {
+      const key = path.classification;
       const list = byBand.get(key);
-      if (list) list.push(seg);
-      else byBand.set(key, [seg]);
+      if (list) list.push(path);
+      else byBand.set(key, [path]);
     }
     const canvas = this.map?.getCanvas();
-    for (const [band, segs] of byBand) {
+    for (const [band, bandPaths] of byBand) {
       const positions: number[] = [];
       const colors: number[] = [];
       const c = new THREE.Color();
-      for (const seg of segs) {
-        for (const p of [seg.a, seg.b]) {
-          const [x, y, z] = sceneOffset(origin, p, this.exaggeration);
-          positions.push(x, y, z);
-          c.set(this.colors[band] ?? this.colors['unknown-terrain']!);
-          colors.push(c.r, c.g, c.b);
+      c.set(this.colors[band] ?? this.colors['unknown-terrain']!);
+      for (const path of bandPaths) {
+        for (let i = 1; i < path.points.length; i += 1) {
+          for (const p of [path.points[i - 1]!, path.points[i]!]) {
+            const [x, y, z] = sceneOffset(origin, p, this.exaggeration);
+            positions.push(x, y, z);
+            colors.push(c.r, c.g, c.b);
+          }
         }
       }
       const geometry = new LineSegmentsGeometry();

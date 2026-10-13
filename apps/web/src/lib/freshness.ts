@@ -18,3 +18,17 @@ export const FRESHNESS_LABEL: Record<FreshnessBucket, string> = {
   stale: 'seen < 28 d',
   long: 'long-unseen (> 28 d)',
 };
+
+/**
+ * Activity window for the planner (Ben, 2026-10-13): only nodes seen on the
+ * network in the last 14 days are used — dead repeaters must not appear on
+ * the map or in assessments.
+ */
+export const ACTIVE_WINDOW_DAYS = 14;
+
+export function isActive(lastSeenIso: string | null, now = Date.now()): boolean {
+  if (!lastSeenIso) return false;
+  const t = Date.parse(lastSeenIso);
+  if (!Number.isFinite(t)) return false;
+  return now - t <= ACTIVE_WINDOW_DAYS * 86_400_000;
+}
