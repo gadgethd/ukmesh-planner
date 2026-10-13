@@ -128,3 +128,12 @@ no-agents restriction, continuous execution, measure-first resources).
   metadata; UK Mesh untouched (site 200, containers healthy). Footprints:
   ingest 66MB · api 77MB · web 13MB · db 91MB — well inside caps.
 - Log hygiene: `redactUrl` now strips userinfo entirely; unit-tested.
+
+- **Stage 3 step 1 — data endpoints live (2026-10-13 ~00:41 UTC).**
+  `GET /api/v1/snapshot/meta`, `/api/v1/repeaters` (bbox + keyset cursor) and
+  `/api/v1/observed-links` (either-endpoint bbox + composite cursor), plus
+  in-process rate limiting on `/api/v1/*` (health probes exempt). API unit
+  tests 12/12; deployed to staging and smoke-tested through the web→api chain
+  with real data (Newcastle bbox: real repeaters, directional link evidence
+  with force_viable, working pagination, 400 on invalid bbox, live
+  `datasetVersion`).
