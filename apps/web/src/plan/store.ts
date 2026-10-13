@@ -27,8 +27,9 @@ export interface PlanSummary {
 }
 
 const DB_NAME = 'ukmesh-planner';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE = 'plans';
+const SHARES = 'share-meta';
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -37,6 +38,12 @@ function openDb(): Promise<IDBDatabase> {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) {
         db.createObjectStore(STORE, { keyPath: 'id' });
+      }
+      // v2: local metadata for plans this browser has shared (id + revoke
+      // token). The share itself lives on the server; this is only how the
+      // creator can later revoke or reference it.
+      if (!db.objectStoreNames.contains(SHARES)) {
+        db.createObjectStore(SHARES, { keyPath: 'id' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -97,6 +104,44 @@ export async function deletePlan(id: string): Promise<void> {
   const db = await openDb();
   try {
     await requestToPromise(db.transaction(STORE, 'readwrite').objectStore(STORE).delete(id));
+  } finally {
+    db.close();
+  }
+}
+
+export interface ShareMeta {
+  id: string;
+  revokeToken: string;
+  createdAt: string;
+  expiresAt: string;
+  name: string;
+}
+
+export async function saveShareMeta(meta: ShareMeta): Promise<void> {
+  const db = await openDb();
+  try {
+    await requestToPromise(db.transaction(SHARES, 'readwrite').objectStore(SHARES).put(meta));
+  } finally {
+    db.close();
+  }
+}
+
+export async function listShareMetas(): Promise<ShareMeta[]> {
+  const db = await openDb();
+  try {
+    const all = await requestToPromise(
+      db.transaction(SHARES, 'readonly').objectStore(SHARES).getAll() as IDBRequest<ShareMeta[]>,
+    );
+    return all.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  } finally {
+    db.close();
+  }
+}
+
+export async function deleteShareMeta(id: string): Promise<void> {
+  const db = await openDb();
+  try {
+    await requestToPromise(db.transaction(SHARES, 'readwrite').objectStore(SHARES).delete(id));
   } finally {
     db.close();
   }

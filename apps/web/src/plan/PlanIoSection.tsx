@@ -5,7 +5,19 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import type { RfSettings } from '@ukmesh-planner/contracts';
-import { deletePlan, listPlans, loadPlan, savePlan, type PlanSummary, type SerializedPlan } from './store.js';
+import {
+  deletePlan,
+  deleteShareMeta,
+  listPlans,
+  listShareMetas,
+  loadPlan,
+  savePlan,
+  saveShareMeta,
+  type PlanSummary,
+  type SerializedPlan,
+  type ShareMeta,
+} from './store.js';
+import { createShare, revokeShare } from './shareClient.js';
 import { exportPlanJSON, parsePlanJSON, planToCSV, planToGeoJSON, type ExportLink } from './io.js';
 import type { Mode } from './planState.js';
 
@@ -33,10 +45,12 @@ function download(filename: string, text: string, mime: string): void {
 export function PlanIoSection({ site, mode, rf, links, onLoadPlan }: Props) {
   const [name, setName] = useState('');
   const [saved, setSaved] = useState<PlanSummary[]>([]);
+  const [shares, setShares] = useState<ShareMeta[]>([]);
   const [status, setStatus] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     void listPlans().then(setSaved).catch(() => setSaved([]));
+    void listShareMetas().then(setShares).catch(() => setShares([]));
   }, []);
   useEffect(refresh, [refresh]);
 
@@ -159,6 +173,80 @@ export function PlanIoSection({ site, mode, rf, links, onLoadPlan }: Props) {
           />
         </label>
       </div>
+      <div className="planio-share">
+        <span className="muted small">Share (optional):</span>
+        <button
+          type="button"
+          className="detail-btn"
+          disabled={!site}
+          onClick={() => {
+            setStatus('Creating share link…');
+            void createShare(currentPlan())
+              .then((created) => {
+                const url = `${location.origin}${location.pathname}#share=${created.id}`;
+                return saveShareMeta({
+                  id: created.id,
+                  revokeToken: created.revokeToken,
+                  createdAt: new Date().toISOString(),
+                  expiresAt: created.expiresAt,
+                  name: name.trim() || 'Shared plan',
+                }).then(() => {
+                  refresh();
+                  setStatus('Share link ready — copy it from the list below.');
+                });
+              })
+              .catch(() => setStatus('Share failed — the server may be unavailable.'));
+          }}
+        >
+          Create share link
+        </button>
+        {shares.length === 0 ? (
+          <span className="muted small">nothing shared from this browser yet</span>
+        ) : null}
+      </div>
+      {shares.length > 0 ? (
+        <ul className="planio-list planio-shares">
+          {shares.map((sh) => {
+            const url = `${location.origin}${location.pathname}#share=${sh.id}`;
+            return (
+              <li key={sh.id}>
+                <span className="planio-name">{sh.name}</span>
+                <span className="muted small">expires {new Date(sh.expiresAt).toLocaleDateString()}</span>
+                <button
+                  type="button"
+                  className="ghost small"
+                  onClick={() => {
+                    void navigator.clipboard
+                      .writeText(url)
+                      .then(() => setStatus('Link copied.'))
+                      .catch(() => setStatus(url));
+                  }}
+                >
+                  Copy link
+                </button>
+                <button
+                  type="button"
+                  className="ghost small"
+                  onClick={() => {
+                    void revokeShare(sh.id, sh.revokeToken).then((ok) => {
+                      if (ok) {
+                        void deleteShareMeta(sh.id).then(() => {
+                          refresh();
+                          setStatus('Share revoked.');
+                        });
+                      } else {
+                        setStatus('Revoke failed — try again.');
+                      }
+                    });
+                  }}
+                >
+                  Revoke
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
       {status ? <p className="muted small planio-status">{status}</p> : null}
     </div>
   );

@@ -24,6 +24,8 @@ import { ProfilePanel, type ProfileUiState } from './advanced/ProfilePanel.js';
 import { RfEditor } from './advanced/RfEditor.js';
 import { TopologyPanel } from './advanced/TopologyPanel.js';
 import { PlanIoSection } from './plan/PlanIoSection.js';
+import { fetchShare, shareIdFromHash } from './plan/shareClient.js';
+import { parsePlanJSON } from './plan/io.js';
 import type { SerializedPlan } from './plan/store.js';
 import { CandidatePanel, type CandidatesUiState } from './advanced/CandidatePanel.js';
 import {
@@ -92,6 +94,11 @@ export function App() {
   const [observedLinks, setObservedLinks] = useState<PlannerObservedLink[]>([]);
   const observedLoadedRef = useRef<string | null>(null);
   const [removalId, setRemovalId] = useState<string | null>(null);
+  const [shareBanner, setShareBanner] = useState<
+    | { kind: 'offer'; plan: SerializedPlan; expiresAt: string }
+    | { kind: 'problem'; message: string }
+    | null
+  >(null);
   const [candGoal, setCandGoal] = useState<CandidateGoal>('balanced');
   const [candidatesState, setCandidatesState] = useState<CandidatesUiState>({
     status: 'idle',
@@ -585,6 +592,27 @@ export function App() {
     [applySite],
   );
 
+  // Shared-plan link (#share=<id>): offer, never auto-apply — the visitor
+  // explicitly opts in before a shared plan replaces what is on screen.
+  useEffect(() => {
+    const id = shareIdFromHash(window.location.hash);
+    if (!id) return;
+    void fetchShare(id).then((res) => {
+      if (res.status === 'ok') {
+        const parsed = parsePlanJSON(JSON.stringify(res.plan));
+        if (parsed.ok) {
+          setShareBanner({ kind: 'offer', plan: parsed.plan, expiresAt: res.expiresAt });
+        } else {
+          setShareBanner({ kind: 'problem', message: 'That share does not contain a valid plan.' });
+        }
+      } else if (res.status === 'revoked' || res.status === 'expired' || res.status === 'not-found') {
+        setShareBanner({ kind: 'problem', message: `Shared plan ${res.status === 'not-found' ? 'not found' : res.status}.` });
+      } else {
+        setShareBanner({ kind: 'problem', message: 'Could not fetch the shared plan.' });
+      }
+    });
+  }, []);
+
   // --- debug hook (used by end-to-end smoke tests) -------------------------
   useEffect(() => {
     (window as unknown as { __plannerMap?: unknown }).__plannerMap = viewRef.current?.map ?? null;
@@ -723,6 +751,46 @@ export function App() {
       <div ref={containerRef} className="map" />
 
       <div className="sheets">
+      {shareBanner ? (
+        <div className="share-banner" role="status">
+          {shareBanner.kind === 'offer' ? (
+            <>
+              <span>
+                A plan was shared with you (expires{' '}
+                {new Date(shareBanner.expiresAt).toLocaleDateString()}).
+              </span>
+              <button
+                type="button"
+                className="detail-btn"
+                onClick={() => {
+                  applySerializedPlan(shareBanner.plan);
+                  setShareBanner(null);
+                  history.replaceState(null, '', location.pathname);
+                }}
+              >
+                Load it
+              </button>
+              <button
+                type="button"
+                className="ghost small"
+                onClick={() => {
+                  setShareBanner(null);
+                  history.replaceState(null, '', location.pathname);
+                }}
+              >
+                Dismiss
+              </button>
+            </>
+          ) : (
+            <>
+              <span>{shareBanner.message}</span>
+              <button type="button" className="ghost small" onClick={() => setShareBanner(null)}>
+                Dismiss
+              </button>
+            </>
+          )}
+        </div>
+      ) : null}
       <ResultSheet
         site={site}
         assess={assess}

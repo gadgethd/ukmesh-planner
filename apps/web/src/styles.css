@@ -268,3 +268,12 @@ button.ghost:hover { border-color: var(--accent); color: var(--accent); }
 .planio-import { position: relative; overflow: hidden; display: inline-flex; align-items: center; }
 .planio-import input[type='file'] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .planio-status { margin: 2px 0 0; }
+
+/* ---------- shares ---------- */
+.planio-share { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.planio-shares .muted { flex: 0 0 auto; }
+.share-banner {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: var(--panel-solid); border: 1px solid var(--accent);
+  border-radius: 10px; padding: 8px 12px; font-size: 12.5px;
+}
