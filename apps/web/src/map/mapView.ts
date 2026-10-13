@@ -27,6 +27,7 @@ import type { FeatureCollection, LineString, Point } from 'geojson';
 import type { PlannerRepeater } from '@ukmesh-planner/contracts';
 import { freshnessBucket, type FreshnessBucket } from '../lib/freshness.js';
 import { CODE_RGBA } from '../compute/coverage/codes.js';
+import { Link3DLayer, type Link3DSegment } from './linkLayer3D.js';
 
 export const STYLE_LIGHT = 'https://tiles.openfreemap.org/styles/positron';
 export const STYLE_DARK = 'https://tiles.openfreemap.org/styles/dark';
@@ -83,7 +84,8 @@ export class MapView {
   private overlaysReady = false;
   private repeaterClickBound = false;
   private pendingRepeaters: FeatureCollection<Point> | null = null;
-  private pendingLinks: FeatureCollection<LineString> | null = null;
+  private pendingSegments: Link3DSegment[] = [];
+  private link3d: Link3DLayer | null = null;
   private pendingObserved: FeatureCollection<LineString> | null = null;
   private theme: Theme = 'light';
   /** True while the built-in minimal style is displayed (no remote basemap). */
@@ -127,8 +129,14 @@ export class MapView {
       try {
         this.installTerrain();
         this.installOverlays();
-      } catch {
-        // Style mid-update; a later styledata/load event retries.
+      } catch (err) {
+        // Style mid-update; a later styledata/load event retries. Record the
+        // failure for E2E diagnostics — silent retries hid a real error once.
+        const w = window as unknown as { __mapLog?: string[] };
+        w.__mapLog = w.__mapLog ?? [];
+        if (w.__mapLog.length < 60) {
+          w.__mapLog.push(err instanceof Error ? `${err.name}: ${err.message}` : String(err));
+        }
       }
     };
     this.map.on('load', install);
@@ -256,63 +264,32 @@ export class MapView {
         });
       }
     }
-    if (!this.map.getSource('links')) {
-      this.map.addSource('links', {
-        type: 'geojson',
-        data: this.pendingLinks ?? { type: 'FeatureCollection', features: [] },
-      });
-      this.map.addLayer({
-        id: 'links-line',
-        type: 'line',
-        source: 'links',
-        filter: ['in', ['get', 'classification'], ['literal', ['likely', 'unlikely']]],
-        paint: {
-          'line-color': [
-            'match',
-            ['get', 'classification'],
-            'likely', LINK_COLORS.likely,
-            'unlikely', LINK_COLORS.unlikely,
-            LINK_COLORS['unknown-terrain'],
-          ],
-          'line-width': ['match', ['get', 'classification'], 'likely', 2.4, 1.4],
-          'line-opacity': 0.9,
-        },
-        layout: {
-          'line-cap': 'round',
-        },
-      });
-      // Dashed layer keeps marginal/blocked/unknown distinct without relying on
-      // colour alone (build brief §5.3).
-      this.map.addLayer({
-        id: 'links-dashed',
-        type: 'line',
-        source: 'links',
-        filter: ['in', ['get', 'classification'], ['literal', ['marginal', 'blocked', 'unknown-terrain']]],
-        paint: {
-          'line-color': [
-            'match',
-            ['get', 'classification'],
-            'marginal', LINK_COLORS.marginal,
-            'blocked', LINK_COLORS.blocked,
-            LINK_COLORS['unknown-terrain'],
-          ],
-          // Blocked paths are context, not the headline: thinner + fainter so
-          // dense sites read as a pattern instead of a hairball (build brief §5).
-          'line-width': ['match', ['get', 'classification'], 'blocked', 1.4, 1.8],
-          'line-opacity': ['match', ['get', 'classification'], 'blocked', 0.55, 0.85],
-          'line-dasharray': [2.5, 2],
-        },
-        layout: {
-          'line-cap': 'butt',
-        },
-      });
+    // Predicted links are 3D line-of-sight objects (floating antenna-top to
+    // antenna-top, depth-tested against terrain) — not surface-glued lines.
+    // The custom layer survives style swaps: it is created once and re-added
+    // whenever a style reset removed it (onAdd re-fires, rebuilding the mesh).
+    if (!this.link3d) {
+      this.link3d = new Link3DLayer({ exaggeration: 1.3, linewidth: 2.6 });
+    }
+    const w = window as unknown as { __mapLog?: string[] };
+    w.__mapLog = w.__mapLog ?? [];
+    const present = !!this.map.getLayer('links-3d');
+    if (w.__mapLog.length < 80) w.__mapLog.push(`link3d install: present=${present} ready=${this.overlaysReady}`);
+    if (!present) {
+      this.link3d.setSegments(this.pendingSegments);
+      try {
+        this.map.addLayer(this.link3d);
+        w.__mapLog.push(`link3d added; now=${!!this.map.getLayer('links-3d')}`);
+      } catch (err) {
+        w.__mapLog.push(`link3d addLayer threw: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
     if (!this.map.getSource('observed-links')) {
       this.map.addSource('observed-links', {
         type: 'geojson',
         data: this.pendingObserved ?? { type: 'FeatureCollection', features: [] },
       });
-      const beforeLinks = this.map.getLayer('links-line') ? 'links-line' : undefined;
+      const beforeLinks = this.map.getStyle().layers?.find((l) => l.id.startsWith('repeater'))?.id;
       this.map.addLayer(
         {
           id: 'observed-links-line',
@@ -355,10 +332,17 @@ export class MapView {
     if (src) src.setData(this.pendingRepeaters);
   }
 
-  setLinks(features: FeatureCollection<LineString>): void {
-    this.pendingLinks = features;
-    const src = this.map.getSource('links') as GeoJSONSource | undefined;
-    if (src) src.setData(features);
+  /** Predicted links as 3D LOS segments (see Link3DLayer). */
+  setLinks3D(segments: Link3DSegment[]): void {
+    this.pendingSegments = segments;
+    this.link3d?.setSegments(segments);
+  }
+
+  /** Tilt the camera for the 3D view; returns the new pitch state. */
+  togglePitch(): boolean {
+    const next = this.map.getPitch() > 10 ? 0 : 55;
+    this.map.easeTo({ pitch: next, duration: 700 });
+    return next > 10;
   }
 
   /**

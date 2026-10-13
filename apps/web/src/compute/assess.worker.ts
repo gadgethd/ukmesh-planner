@@ -35,6 +35,8 @@ export interface AssessRequest {
 
 export interface AssessedLink extends LinkResult {
   name: string | null;
+  /** Ground elevation at the target, for 3D LOS rendering (null = unknown). */
+  targetGroundM: number | null;
 }
 
 export interface AssessResponse {
@@ -264,6 +266,7 @@ async function handle(req: AssessRequest): Promise<void> {
     const profile = { targetSpacingM: 60, minSamples: 24, maxSamples: 1024 };
     for (const c of req.candidates) {
       await provider.warmPath(req.site, c, profile);
+      const targetGroundM = provider.elevationAt(c);
       const r = assessLink({
         provider,
         source: {
@@ -277,7 +280,7 @@ async function handle(req: AssessRequest): Promise<void> {
         profile,
       });
       if (r.classification === 'unknown-terrain') missingTerrain += 1;
-      results.push({ ...r, name: c.name });
+      results.push({ ...r, name: c.name, targetGroundM });
     }
 
     const response: AssessResponse = {

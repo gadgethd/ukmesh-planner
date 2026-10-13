@@ -35,6 +35,7 @@ import {
   type TopoNode,
 } from './advanced/topology.js';
 import type { CandidateGoal } from './advanced/candidates.js';
+import type { Link3DSegment } from './map/linkLayer3D.js';
 import type { Mode, ProfilePair } from './plan/planState.js';
 
 const MAX_EVALUATED = 300;
@@ -76,6 +77,7 @@ export function App() {
   const [undoStack, setUndoStack] = useState<SiteState[]>([]);
   const [assess, setAssess] = useState<AssessUiState>(EMPTY_ASSESS);
   const [showAllLinks, setShowAllLinks] = useState(false);
+  const [is3d, setIs3d] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [legendOpen, setLegendOpen] = useState(false);
   const [coverageOn, setCoverageOn] = useState(false);
@@ -320,7 +322,7 @@ export function App() {
     setSite(null);
     setAssess(EMPTY_ASSESS);
     viewRef.current?.setPlannedSite(null);
-    viewRef.current?.setLinks({ type: 'FeatureCollection', features: [] });
+    viewRef.current?.setLinks3D([]);
     coverageJobRef.current = 0; // discard in-flight coverage
     void viewRef.current?.setCoverage(null);
     setCoverageState({ status: 'idle', progress: null, backend: null, counts: null, elapsedMs: null, notices: [], error: null });
@@ -348,40 +350,36 @@ export function App() {
     [applySite],
   );
 
-  // --- link drawing --------------------------------------------------------
-  const linkFeatures = useMemo((): FeatureCollection<LineString> => {
-    if (!site) return { type: 'FeatureCollection', features: [] };
-    const visible = assess.results.filter((r) => {
-      if (r.classification === 'likely' || r.classification === 'marginal' || r.classification === 'blocked') {
-        return true;
-      }
-      return showAllLinks;
-    });
-    return {
-      type: 'FeatureCollection',
-      features: visible
-        .map((r) => {
-          const rep = repeatersById.get(r.targetId);
-          if (!rep) return null;
-          return {
-            type: 'Feature' as const,
-            geometry: {
-              type: 'LineString' as const,
-              coordinates: [
-                [site.lon, site.lat],
-                [rep.lon, rep.lat],
-              ],
-            },
-            properties: { classification: r.classification, id: r.targetId },
-          };
-        })
-        .filter((f): f is NonNullable<typeof f> => f !== null),
-    };
-  }, [site, assess.results, showAllLinks, repeatersById]);
+  // --- link drawing (3D LOS objects) ---------------------------------------
+  // Blocked (red) links are hidden by default — they read as noise over the
+  // map; the results sheet toggle reveals them when wanted.
+  const linkSegments = useMemo((): Link3DSegment[] => {
+    if (!site) return [];
+    const siteAltM = (assess.siteElevationM ?? 0) + site.antennaHeightAglM;
+    return assess.results
+      .filter((r) => {
+        if (r.classification === 'likely' || r.classification === 'marginal') return true;
+        return showAllLinks;
+      })
+      .map((r) => {
+        const rep = repeatersById.get(r.targetId);
+        if (!rep) return null;
+        return {
+          a: { lon: site.lon, lat: site.lat, altM: siteAltM },
+          b: {
+            lon: rep.lon,
+            lat: rep.lat,
+            altM: (r.targetGroundM ?? assess.siteElevationM ?? 0) + rf.rxHeightAglM,
+          },
+          classification: r.classification,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
+  }, [site, assess.results, assess.siteElevationM, showAllLinks, repeatersById, rf.rxHeightAglM]);
 
   useEffect(() => {
-    viewRef.current?.setLinks(linkFeatures);
-  }, [linkFeatures]);
+    viewRef.current?.setLinks3D(linkSegments);
+  }, [linkSegments]);
 
   useEffect(() => {
     viewRef.current?.setTheme(theme);
@@ -630,7 +628,8 @@ export function App() {
         totalWithinRange: assess.totalWithinRange,
         siteElevationM: assess.siteElevationM,
       },
-      linksDrawn: linkFeatures.features.length,
+      linksDrawn: linkSegments.length,
+      is3d,
       mode,
       rf: { frequencyMhz: rf.frequencyMhz, txPowerDbm: rf.txPowerDbm, rxSensitivityDbm: rf.rxSensitivityDbm },
       profile: profileState.status,
@@ -660,7 +659,7 @@ export function App() {
     repeaterCount,
     site,
     assess,
-    linkFeatures,
+    linkSegments,
     coverageOn,
     coverageDetail,
     coverageState,
@@ -733,12 +732,14 @@ export function App() {
           </ul>
           <h3>Predicted links</h3>
           <ul>
-            <li><span className="swatch" style={{ background: '#15803d' }} /> likely (solid)</li>
-            <li><span className="swatch" style={{ background: '#d97706' }} /> marginal (dashed)</li>
-            <li><span className="swatch" style={{ background: '#dc2626' }} /> blocked (dashed)</li>
-            <li><span className="swatch" style={{ background: '#94a3b8' }} /> unlikely (thin, optional)</li>
-            <li><span className="swatch" style={{ background: '#9333ea' }} /> terrain unknown</li>
+            <li><span className="swatch" style={{ background: '#15803d' }} /> likely</li>
+            <li><span className="swatch" style={{ background: '#d97706' }} /> marginal</li>
+            <li><span className="swatch" style={{ background: '#dc2626' }} /> blocked (hidden unless enabled)</li>
           </ul>
+          <p className="muted small">
+            Links are drawn as 3D line-of-sight objects at antenna height — tilt with the 3D
+            button to see them against the terrain.
+          </p>
           <h3>Observed links</h3>
           <ul>
             <li><span className="swatch" style={{ background: '#64748b' }} /> reciprocal evidence (solid)</li>
@@ -749,6 +750,15 @@ export function App() {
       ) : null}
 
       <div ref={containerRef} className="map" />
+      <button
+        type="button"
+        className="map-3d-btn"
+        aria-pressed={is3d}
+        title="Toggle 3D view (tilt the camera)"
+        onClick={() => setIs3d(viewRef.current?.togglePitch() ?? false)}
+      >
+        {is3d ? '2D' : '3D'}
+      </button>
 
       <div className="sheets">
       {shareBanner ? (

@@ -219,7 +219,7 @@ export function ResultSheet(props: Props) {
               checked={props.showAllLinks}
               onChange={(e) => props.onToggleShowAll(e.target.checked)}
             />
-            Show all evaluated links (including unlikely)
+            Show blocked links (red)
           </label>
 
           <div className="coverage-block">
