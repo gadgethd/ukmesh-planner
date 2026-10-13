@@ -358,3 +358,28 @@ Delivered:
   200 m ≈ 77 dB + roughness/diffraction — consistent); 7 viable of 300
   candidates at the Newcastle test point (stricter and more realistic than
   the previous margin model, as Ben asked).
+
+## 2026-10-13 (night) — map-invisible incident: two root causes found and fixed
+
+Ben: "its broken... I cant see the map at all". Reproduced in a fresh browser
+load (UI chrome fine, map canvas white — the earlier "blank frames" blamed on
+renderer flakiness were THIS bug).
+
+**Cause 1 (layout):** the 3D-links commit added `.app { position: relative; }`
+to anchor the 3D button, overriding `.app { position: fixed; inset: 0 }`. The
+app shell collapsed to height 0; the map canvas fell back to 300 px at the top
+of the page. Fix: remove the override (the fixed shell is already a containing
+block) + explicit button placement (below topbar; left of the sheet column).
+
+**Cause 2 (rendering):** Link3DLayer.render() projected through
+`options.modelViewProjectionMatrix` — under MapLibre v6 that matrix does not
+accept mercator [0..1] input; the layer drew nothing (isolated raw-GL probes:
+clip-space triangle ✓, mvp triangle ✗, `defaultProjectionData.mainMatrix`
+triangle ✓). Fix: project through `defaultProjectionData.mainMatrix` with the
+`tileMercatorCoords` conversion; also `frustumCulled = false` for fat-line
+geometry. Custom-layer contract verified empirically end-to-end.
+
+Live verification after fixes: map renders (tiles), ITM rows + viable chips
+populate, 7-9 viable links draw and A/B-diff (121 px), tilt applies
+(230k px frame change, pitch 55), calibration served (139.5/130, 37,284
+samples). Commit 24c012e.
