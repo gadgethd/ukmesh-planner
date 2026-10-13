@@ -15,6 +15,8 @@ import { haversineDistanceM } from '@ukmesh-planner/rf-core';
 import type { FeatureCollection, LineString } from 'geojson';
 import { MapView } from './map/mapView.js';
 import { ComputeClient } from './compute/client.js';
+import { CoverageClient, type CoverageProgressMessage, type CoverageResultMessage } from './compute/coverage/client.js';
+import type { CoverageDetail } from './compute/coverage/params.js';
 import { ResultSheet, type AssessUiState, type SiteState } from './simple/ResultSheet.js';
 
 const MAX_EVALUATED = 300;
@@ -43,6 +45,10 @@ export function App() {
   const latestJobRef = useRef(0);
   const siteRef = useRef<SiteState | null>(null);
   const undoStackRef = useRef<SiteState[]>([]);
+  const coverageClientRef = useRef<CoverageClient | null>(null);
+  const coverageJobRef = useRef(0);
+  const coverageOnRef = useRef(false);
+  const runCoverageRef = useRef<(s: SiteState) => void>(() => {});
 
   const [snapshot, setSnapshot] = useState<SnapshotMeta | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -54,6 +60,17 @@ export function App() {
   const [showAllLinks, setShowAllLinks] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [legendOpen, setLegendOpen] = useState(false);
+  const [coverageOn, setCoverageOn] = useState(false);
+  const [coverageDetail, setCoverageDetail] = useState<CoverageDetail>('medium');
+  const [coverageState, setCoverageState] = useState<{
+    status: 'idle' | 'running' | 'done' | 'error';
+    progress: { done: number; total: number } | null;
+    backend: string | null;
+    counts: number[] | null;
+    elapsedMs: number | null;
+    notices: string[];
+    error: string | null;
+  }>({ status: 'idle', progress: null, backend: null, counts: null, elapsedMs: null, notices: [], error: null });
 
   const rf = DEFAULT_UK_RF_SETTINGS;
 
@@ -107,11 +124,15 @@ export function App() {
     viewRef.current = view;
     const client = new ComputeClient();
     clientRef.current = client;
+    const coverageClient = new CoverageClient();
+    coverageClientRef.current = coverageClient;
     return () => {
       client.terminate();
+      coverageClient.terminate();
       view.map.remove();
       viewRef.current = null;
       clientRef.current = null;
+      coverageClientRef.current = null;
     };
   }, []);
 
@@ -172,10 +193,55 @@ export function App() {
       timerRef.current = window.setTimeout(() => {
         timerRef.current = null;
         runAssess(s);
+        if (coverageOnRef.current) runCoverageRef.current(s);
       }, DEBOUNCE_MS);
     },
     [runAssess],
   );
+
+  const runCoverage = useCallback(
+    (s: SiteState) => {
+      const client = coverageClientRef.current;
+      if (!client) return;
+      setCoverageState((prev) => ({ ...prev, status: 'running', progress: null, error: null }));
+      const handle = client.start(
+        { site: { lat: s.lat, lon: s.lon, antennaHeightAglM: s.antennaHeightAglM }, detail: coverageDetail, rf },
+        (p: CoverageProgressMessage) => {
+          if (coverageJobRef.current !== p.jobId) return;
+          setCoverageState((prev) => ({ ...prev, progress: { done: p.done, total: p.total }, backend: p.backend }));
+        },
+      );
+      coverageJobRef.current = handle.jobId;
+      handle.done
+        .then((res: CoverageResultMessage) => {
+          if (coverageJobRef.current !== handle.jobId) return;
+          setCoverageState({
+            status: 'done',
+            progress: { done: res.geometry.width * res.geometry.height, total: res.geometry.width * res.geometry.height },
+            backend: res.backend,
+            counts: res.counts,
+            elapsedMs: res.elapsedMs,
+            notices: res.notices,
+            error: null,
+          });
+          void viewRef.current?.setCoverage({
+            bounds: res.geometry.bounds,
+            width: res.geometry.width,
+            height: res.geometry.height,
+            codes: res.codes,
+          });
+        })
+        .catch((err: unknown) => {
+          if (coverageJobRef.current !== handle.jobId) return;
+          setCoverageState((prev) => ({ ...prev, status: 'error', error: err instanceof Error ? err.message : String(err) }));
+        });
+    },
+    [coverageDetail, rf],
+  );
+
+  useEffect(() => {
+    runCoverageRef.current = runCoverage;
+  }, [runCoverage]);
 
   const applySite = useCallback(
     (next: SiteState, opts: { pushUndo: boolean; debounced: boolean; moveMarker: boolean }) => {
@@ -208,6 +274,9 @@ export function App() {
     setAssess(EMPTY_ASSESS);
     viewRef.current?.setPlannedSite(null);
     viewRef.current?.setLinks({ type: 'FeatureCollection', features: [] });
+    coverageJobRef.current = 0; // discard in-flight coverage
+    void viewRef.current?.setCoverage(null);
+    setCoverageState({ status: 'idle', progress: null, backend: null, counts: null, elapsedMs: null, notices: [], error: null });
   }, []);
 
   const undo = useCallback(() => {
@@ -290,8 +359,17 @@ export function App() {
       },
       linksDrawn: linkFeatures.features.length,
       map: viewRef.current?.getState() ?? null,
+      coverage: {
+        on: coverageOn,
+        detail: coverageDetail,
+        status: coverageState.status,
+        backend: coverageState.backend,
+        counts: coverageState.counts,
+        progress: coverageState.progress,
+        notices: coverageState.notices,
+      },
     };
-  }, [snapshot, repeaterCount, site, assess, linkFeatures]);
+  }, [snapshot, repeaterCount, site, assess, linkFeatures, coverageOn, coverageDetail, coverageState]);
 
   const snapshotAge = snapshot
     ? `${Math.max(0, Math.round((Date.now() - Date.parse(snapshot.fetchedAt)) / 60000))} min ago`
@@ -361,6 +439,29 @@ export function App() {
         onHeightChange={changeHeight}
         onClear={clearSite}
         onUndo={undo}
+        coverageOn={coverageOn}
+        coverageDetail={coverageDetail}
+        coverageState={coverageState}
+        onToggleCoverage={(on) => {
+          coverageOnRef.current = on;
+          setCoverageOn(on);
+          if (on) {
+            const cur = siteRef.current;
+            if (cur) runCoverage(cur);
+          } else {
+            coverageJobRef.current = 0;
+            void viewRef.current?.setCoverage(null);
+            setCoverageState({ status: 'idle', progress: null, backend: null, counts: null, elapsedMs: null, notices: [], error: null });
+          }
+        }}
+        onCoverageDetail={(d) => {
+          setCoverageDetail(d);
+          const cur = siteRef.current;
+          if (cur && coverageOnRef.current) {
+            // rerun with the new detail — runCoverageRef updates next render
+            window.setTimeout(() => runCoverageRef.current(cur), 0);
+          }
+        }}
         onFocusRepeater={(id) => {
           const rep = repeatersById.get(id);
           if (rep) viewRef.current?.flyToSite({ lng: rep.lon, lat: rep.lat });

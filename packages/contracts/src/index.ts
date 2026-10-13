@@ -136,7 +136,14 @@ export interface PlanState {
 // 3. Compute protocol (single schema for WebGPU + WASM engines)
 // ---------------------------------------------------------------------------
 
-export const computeBackendSchema = z.enum(['webgpu', 'wasm']);
+/**
+ * 'webgpu'  — WGSL engine (hardware adapters only by default).
+ * 'cpu'     — the shared TypeScript core running in a Worker (the parity
+ *             oracle; used as the bounded fallback when WebGPU is absent or
+ *             unsuitable). 'wasm' is reserved for a future compiled build of
+ *             the same core.
+ */
+export const computeBackendSchema = z.enum(['webgpu', 'wasm', 'cpu']);
 export type ComputeBackend = z.infer<typeof computeBackendSchema>;
 
 export const computeModelClassSchema = z.enum(['los', 'terrain-link-budget', 'regional-coverage']);

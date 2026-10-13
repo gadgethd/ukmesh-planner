@@ -5,7 +5,11 @@ node_modules/
 # Builds
 dist/
 build/
-coverage/
+# Test-coverage output only — NOT source directories named `coverage`
+# (e.g. apps/web/src/compute/coverage).
+/coverage/
+apps/*/coverage/
+packages/*/coverage/
 *.tsbuildinfo
 
 # Env & secrets — never commit

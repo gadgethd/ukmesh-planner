@@ -20,6 +20,7 @@ import {
   DEM_ZOOM,
   localTileCoords,
   lonLatToGlobalPx,
+  TILE_SIZE,
   tileOfGlobalPx,
   tilesForPoints,
   type TileCoord,
@@ -108,5 +109,54 @@ export class TerrariumTileProvider implements TerrainProvider {
     const n = Math.max(2, Math.ceil(haversineDistanceM(a, b) / 400) + 1);
     const tiles = tilesForPoints(samplePath(a, b, n), DEM_ZOOM);
     await Promise.all(tiles.map((t) => this.loadTile(t)));
+  }
+
+  /**
+   * Assemble a tile-aligned elevation window (Float32Array, NaN = NODATA)
+   * covering the given global-pixel rectangle plus a margin. Used to upload
+   * terrain to the WebGPU engine; the buffer mirrors exactly what
+   * `elevationAt` would sample from the same tiles (tile-local clamp included).
+   */
+  async windowRaster(
+    minPx: { x: number; y: number },
+    maxPx: { x: number; y: number },
+    marginPx = 64,
+  ): Promise<{ data: Float32Array; width: number; height: number; originX: number; originY: number } | null> {
+    const tileMinX = Math.floor((minPx.x - marginPx) / TILE_SIZE);
+    const tileMinY = Math.floor((minPx.y - marginPx) / TILE_SIZE);
+    const tileMaxX = Math.floor((maxPx.x + marginPx) / TILE_SIZE);
+    const tileMaxY = Math.floor((maxPx.y + marginPx) / TILE_SIZE);
+    const tilesX = tileMaxX - tileMinX + 1;
+    const tilesY = tileMaxY - tileMinY + 1;
+    const width = tilesX * TILE_SIZE;
+    const height = tilesY * TILE_SIZE;
+    if (width * height * 4 > 96 * 1024 * 1024) return null; // bounded (96 MB f32)
+
+    const originX = tileMinX * TILE_SIZE;
+    const originY = tileMinY * TILE_SIZE;
+    const data = new Float32Array(width * height);
+
+    const loads: Array<Promise<void>> = [];
+    for (let ty = tileMinY; ty <= tileMaxY; ty += 1) {
+      for (let tx = tileMinX; tx <= tileMaxX; tx += 1) {
+        loads.push(
+          this.loadTile({ z: DEM_ZOOM, x: tx, y: ty }).then((raster) => {
+            const ox = tx * TILE_SIZE - originX;
+            const oy = ty * TILE_SIZE - originY;
+            for (let y = 0; y < TILE_SIZE; y += 1) {
+              const src = y * TILE_SIZE;
+              const dst = (oy + y) * width + ox;
+              if (raster) {
+                data.set(raster.data.subarray(src, src + TILE_SIZE), dst);
+              } else {
+                data.fill(Number.NaN, dst, dst + TILE_SIZE);
+              }
+            }
+          }),
+        );
+      }
+    }
+    await Promise.all(loads);
+    return { data, width, height, originX, originY };
   }
 }

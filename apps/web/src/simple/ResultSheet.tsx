@@ -4,6 +4,7 @@
  */
 import type { PlannerRepeater } from '@ukmesh-planner/contracts';
 import type { AssessedLink } from '../compute/assess.worker.js';
+import type { CoverageDetail } from '../compute/coverage/params.js';
 
 export interface SiteState {
   lat: number;
@@ -38,6 +39,16 @@ const CLASS_LABEL: Record<string, string> = {
   'unknown-terrain': 'terrain unknown',
 };
 
+export interface CoverageUiState {
+  status: 'idle' | 'running' | 'done' | 'error';
+  progress: { done: number; total: number } | null;
+  backend: string | null;
+  counts: number[] | null;
+  elapsedMs: number | null;
+  notices: string[];
+  error: string | null;
+}
+
 interface Props {
   site: SiteState | null;
   assess: AssessUiState;
@@ -50,7 +61,18 @@ interface Props {
   onClear: () => void;
   onUndo: () => void;
   onFocusRepeater: (id: string) => void;
+  coverageOn: boolean;
+  coverageDetail: CoverageDetail;
+  coverageState: CoverageUiState;
+  onToggleCoverage: (on: boolean) => void;
+  onCoverageDetail: (d: CoverageDetail) => void;
 }
+
+const COVERAGE_DETAIL_LABEL: Record<CoverageDetail, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+};
 
 export function ResultSheet(props: Props) {
   const { site, assess } = props;
@@ -199,6 +221,59 @@ export function ResultSheet(props: Props) {
             />
             Show all evaluated links (including unlikely)
           </label>
+
+          <div className="coverage-block">
+            <label className="showall">
+              <input
+                type="checkbox"
+                checked={props.coverageOn}
+                onChange={(e) => props.onToggleCoverage(e.target.checked)}
+              />
+              Show coverage preview (50 × 50 km, bounded)
+            </label>
+            {props.coverageOn ? (
+              <div className="coverage-body">
+                <div className="coverage-detail">
+                  <span className="muted small">Detail:</span>
+                  {(['low', 'medium', 'high'] as const).map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      className={props.coverageDetail === d ? 'detail-btn detail-btn--active' : 'detail-btn'}
+                      onClick={() => props.onCoverageDetail(d)}
+                    >
+                      {COVERAGE_DETAIL_LABEL[d]}
+                    </button>
+                  ))}
+                </div>
+                {props.coverageState.status === 'running' ? (
+                  <p className="status">
+                    <span className="spinner" aria-hidden="true" /> Computing coverage
+                    {props.coverageState.progress
+                      ? ` — ${Math.round((props.coverageState.progress.done / props.coverageState.progress.total) * 100)}%`
+                      : '…'}
+                    {props.coverageState.backend ? ` (${props.coverageState.backend})` : ''}
+                  </p>
+                ) : null}
+                {props.coverageState.status === 'done' && props.coverageState.counts ? (
+                  <p className="muted small">
+                    Coverage on {props.coverageState.backend === 'webgpu' ? 'GPU (WebGPU)' : 'CPU (fallback)'} in{' '}
+                    {props.coverageState.elapsedMs !== null ? `${Math.round(props.coverageState.elapsedMs)} ms` : '—'} ·{' '}
+                    likely {props.coverageState.counts[0] ?? 0} · marginal {props.coverageState.counts[1] ?? 0} · blocked{' '}
+                    {props.coverageState.counts[3] ?? 0} · unknown {props.coverageState.counts[4] ?? 0}
+                  </p>
+                ) : null}
+                {props.coverageState.notices.map((n, i) => (
+                  <p className="muted small" key={i}>
+                    {n}
+                  </p>
+                ))}
+                {props.coverageState.status === 'error' ? (
+                  <p className="status status--error">Coverage failed: {props.coverageState.error}</p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
 
           <p className="muted small">
             {assess.elapsedMs !== null ? `Evaluated in ${Math.round(assess.elapsedMs)} ms. ` : ''}

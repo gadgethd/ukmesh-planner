@@ -26,6 +26,7 @@ setWorkerUrl(maplibreWorkerUrl);
 import type { FeatureCollection, LineString, Point } from 'geojson';
 import type { PlannerRepeater } from '@ukmesh-planner/contracts';
 import { freshnessBucket, type FreshnessBucket } from '../lib/freshness.js';
+import { CODE_RGBA } from '../compute/coverage/codes.js';
 
 export const STYLE_LIGHT = 'https://tiles.openfreemap.org/styles/positron';
 export const STYLE_DARK = 'https://tiles.openfreemap.org/styles/dark';
@@ -328,6 +329,74 @@ export class MapView {
     this.pendingLinks = features;
     const src = this.map.getSource('links') as GeoJSONSource | undefined;
     if (src) src.setData(features);
+  }
+
+  private coverageUrl: string | null = null;
+
+  /**
+   * Coverage raster overlay (Tier B output). `codes` uses the shared cell
+   * codes; pass null to remove. Rendered as a semi-transparent image source
+   * below the repeater/link layers.
+   */
+  async setCoverage(
+    data: { bounds: [number, number, number, number]; width: number; height: number; codes: Uint8Array } | null,
+  ): Promise<void> {
+    if (!data) {
+      if (this.map.getLayer('coverage-raster')) this.map.removeLayer('coverage-raster');
+      if (this.map.getSource('coverage')) this.map.removeSource('coverage');
+      if (this.coverageUrl) {
+        URL.revokeObjectURL(this.coverageUrl);
+        this.coverageUrl = null;
+      }
+      return;
+    }
+    const { width, height, codes, bounds } = data;
+    const rgba = new Uint8ClampedArray(width * height * 4);
+    for (let i = 0; i < codes.length; i += 1) {
+      const c = CODE_RGBA[codes[i] ?? 5] ?? [0, 0, 0, 0];
+      rgba[i * 4] = c[0];
+      rgba[i * 4 + 1] = c[1];
+      rgba[i * 4 + 2] = c[2];
+      rgba[i * 4 + 3] = c[3];
+    }
+    const canvas = new OffscreenCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.putImageData(new ImageData(rgba, width, height), 0, 0);
+    const blob = await canvas.convertToBlob({ type: 'image/png' });
+    const url = URL.createObjectURL(blob);
+    const coordinates: Array<[number, number]> = [
+      [bounds[0], bounds[3]],
+      [bounds[2], bounds[3]],
+      [bounds[2], bounds[1]],
+      [bounds[0], bounds[1]],
+    ];
+    const src = this.map.getSource('coverage') as
+      | { updateImage?: (o: { url: string; coordinates: Array<[number, number]> }) => void }
+      | undefined;
+    if (src && this.map.getLayer('coverage-raster')) {
+      const old = this.coverageUrl;
+      this.coverageUrl = url;
+      src.updateImage?.({ url, coordinates });
+      if (old) URL.revokeObjectURL(old);
+    } else {
+      this.coverageUrl = url;
+      this.map.addSource('coverage', { type: 'image', url, coordinates: coordinates as never });
+      const before = this.map.getLayer('repeater-clusters')
+        ? 'repeater-clusters'
+        : this.map.getLayer('links-line')
+          ? 'links-line'
+          : undefined;
+      this.map.addLayer(
+        {
+          id: 'coverage-raster',
+          type: 'raster',
+          source: 'coverage',
+          paint: { 'raster-opacity': 0.72, 'raster-fade-duration': 0 },
+        },
+        before,
+      );
+    }
   }
 
   setPlannedSite(lngLat: { lng: number; lat: number } | null): void {

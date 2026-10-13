@@ -80,7 +80,7 @@ describe('planner api (stage 1)', () => {
     const body = res.json() as { bounds: number[]; modelVersion: string; computeBackends: string[] };
     expect(body.bounds).toHaveLength(4);
     expect(body.modelVersion).toMatch(/^rf-model-/);
-    expect(body.computeBackends).toContain('wasm');
+    expect(body.computeBackends).toContain('cpu');
     await app.close();
   });
 

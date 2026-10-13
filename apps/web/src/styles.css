@@ -184,3 +184,13 @@ button.ghost:hover { border-color: var(--accent); color: var(--accent); }
   }
   .sheet--hint { left: auto; }
 }
+
+/* ---------- coverage preview ---------- */
+.coverage-block { margin: 8px 0 4px; padding-top: 6px; border-top: 1px solid var(--line); }
+.coverage-body { margin: 4px 0 2px; }
+.coverage-detail { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+.detail-btn {
+  font: inherit; font-size: 12px; padding: 3px 10px; border-radius: 8px;
+  border: 1px solid var(--line); background: transparent; color: var(--text); cursor: pointer;
+}
+.detail-btn--active { border-color: var(--accent); color: var(--accent); font-weight: 600; }

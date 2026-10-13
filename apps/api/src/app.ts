@@ -93,7 +93,7 @@ export function buildApp(deps: AppDeps = {}): FastifyInstance {
       bounds: DEFAULT_BOUNDS,
       modelVersion: RF_MODEL_VERSION,
       datasetVersion: snapshot?.id ?? null,
-      computeBackends: ['wasm', 'webgpu'],
+      computeBackends: ['webgpu', 'cpu'],
       snapshot,
     };
   });
