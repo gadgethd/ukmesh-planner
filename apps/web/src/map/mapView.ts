@@ -84,6 +84,7 @@ export class MapView {
   private repeaterClickBound = false;
   private pendingRepeaters: FeatureCollection<Point> | null = null;
   private pendingLinks: FeatureCollection<LineString> | null = null;
+  private pendingObserved: FeatureCollection<LineString> | null = null;
   private theme: Theme = 'light';
   /** True while the built-in minimal style is displayed (no remote basemap). */
   private styleIsFallback = true;
@@ -306,6 +307,35 @@ export class MapView {
         },
       });
     }
+    if (!this.map.getSource('observed-links')) {
+      this.map.addSource('observed-links', {
+        type: 'geojson',
+        data: this.pendingObserved ?? { type: 'FeatureCollection', features: [] },
+      });
+      const beforeLinks = this.map.getLayer('links-line') ? 'links-line' : undefined;
+      this.map.addLayer(
+        {
+          id: 'observed-links-line',
+          type: 'line',
+          source: 'observed-links',
+          filter: ['==', ['get', 'reciprocal'], true],
+          paint: { 'line-color': '#64748b', 'line-width': 1.1, 'line-opacity': 0.75 },
+          layout: { 'line-cap': 'round' },
+        },
+        beforeLinks,
+      );
+      this.map.addLayer(
+        {
+          id: 'observed-links-oneway',
+          type: 'line',
+          source: 'observed-links',
+          filter: ['==', ['get', 'reciprocal'], false],
+          paint: { 'line-color': '#94a3b8', 'line-width': 1, 'line-opacity': 0.7, 'line-dasharray': [2, 2] },
+          layout: { 'line-cap': 'butt' },
+        },
+        beforeLinks,
+      );
+    }
     this.overlaysReady = true;
   }
 
@@ -328,6 +358,16 @@ export class MapView {
   setLinks(features: FeatureCollection<LineString>): void {
     this.pendingLinks = features;
     const src = this.map.getSource('links') as GeoJSONSource | undefined;
+    if (src) src.setData(features);
+  }
+
+  /**
+   * Observed (real, recorded) links — distinct layer under the predicted
+   * links: reciprocal evidence solid, one-way reports dashed.
+   */
+  setObservedLinks(features: FeatureCollection<LineString>): void {
+    this.pendingObserved = features;
+    const src = this.map.getSource('observed-links') as GeoJSONSource | undefined;
     if (src) src.setData(features);
   }
 

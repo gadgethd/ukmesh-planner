@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   DEFAULT_UK_RF_SETTINGS,
+  type PlannerObservedLink,
   type PlannerRepeater,
   type RfSettings,
   type SnapshotMeta,
@@ -21,6 +22,15 @@ import type { CoverageDetail } from './compute/coverage/params.js';
 import { ResultSheet, type AssessUiState, type SiteState } from './simple/ResultSheet.js';
 import { ProfilePanel, type ProfileUiState } from './advanced/ProfilePanel.js';
 import { RfEditor } from './advanced/RfEditor.js';
+import { TopologyPanel } from './advanced/TopologyPanel.js';
+import { CandidatePanel, type CandidatesUiState } from './advanced/CandidatePanel.js';
+import {
+  removalImpact as computeRemovalImpact,
+  stats as computeTopoStats,
+  type TopoEdge,
+  type TopoNode,
+} from './advanced/topology.js';
+import type { CandidateGoal } from './advanced/candidates.js';
 import type { Mode, ProfilePair } from './plan/planState.js';
 
 const MAX_EVALUATED = 300;
@@ -77,6 +87,18 @@ export function App() {
   }>({ status: 'idle', progress: null, backend: null, counts: null, elapsedMs: null, notices: [], error: null });
 
   const [mode, setMode] = useState<Mode>('simple');
+  const [observedLinks, setObservedLinks] = useState<PlannerObservedLink[]>([]);
+  const observedLoadedRef = useRef<string | null>(null);
+  const [removalId, setRemovalId] = useState<string | null>(null);
+  const [candGoal, setCandGoal] = useState<CandidateGoal>('balanced');
+  const [candidatesState, setCandidatesState] = useState<CandidatesUiState>({
+    status: 'idle',
+    progress: null,
+    candidates: [],
+    screened: 0,
+    error: null,
+  });
+  const candidatesJobRef = useRef(0);
   const [rf, setRf] = useState<RfSettings>({ ...DEFAULT_UK_RF_SETTINGS });
   const [profilePair, setProfilePair] = useState<ProfilePair | null>(null);
   const [profileState, setProfileState] = useState<ProfileUiState>({ status: 'idle', data: null, error: null });
@@ -382,6 +404,48 @@ export function App() {
       });
   }, [mode, site, profilePair, rf]);
 
+  // --- advanced: observed links (loaded once per site neighbourhood) -------
+  useEffect(() => {
+    if (mode !== 'advanced' || !site) return;
+    const key = `${Math.round(site.lat)},${Math.round(site.lon)}`;
+    if (observedLoadedRef.current === key) return;
+    observedLoadedRef.current = key;
+    const bbox = [site.lon - 1.5, site.lat - 1.2, site.lon + 1.5, site.lat + 1.2].map((v) => v.toFixed(3));
+    void (async () => {
+      try {
+        const res = await fetch(`/api/v1/observed-links?bbox=${bbox.join(',')}&limit=20000`);
+        if (!res.ok) throw new Error(`observed-links ${res.status}`);
+        const page = (await res.json()) as { items: PlannerObservedLink[] };
+        setObservedLinks(page.items);
+      } catch {
+        setObservedLinks([]);
+      }
+    })();
+  }, [mode, site]);
+
+  const observedFeatures = useMemo((): FeatureCollection<LineString> => {
+    const feats: Array<{
+      type: 'Feature';
+      geometry: { type: 'LineString'; coordinates: Array<[number, number]> };
+      properties: { reciprocal: boolean; id: string };
+    }> = [];
+    for (const l of observedLinks) {
+      const a = repeatersById.get(l.sourceId);
+      const b = repeatersById.get(l.targetId);
+      if (!a || !b) continue;
+      feats.push({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: [[a.lon, a.lat], [b.lon, b.lat]] },
+        properties: { reciprocal: l.countAToB > 0 && l.countBToA > 0, id: `${l.sourceId}~${l.targetId}` },
+      });
+    }
+    return { type: 'FeatureCollection', features: feats };
+  }, [observedLinks, repeatersById]);
+
+  useEffect(() => {
+    viewRef.current?.setObservedLinks(observedFeatures);
+  }, [observedFeatures]);
+
   // Re-run when RF settings change (Simple and Advanced share them).
   const rfRef = useRef(rf);
   useEffect(() => {
@@ -392,6 +456,97 @@ export function App() {
     runAssess(cur);
     if (coverageOnRef.current) runCoverageRef.current(cur);
   }, [rf, runAssess]);
+
+  // --- advanced: topology + candidate search --------------------------------
+  const topology = useMemo((): { nodes: TopoNode[]; edges: TopoEdge[] } | null => {
+    if (mode !== 'advanced') return null;
+    const nodes: TopoNode[] = [...repeatersById.values()].map((r) => ({
+      id: r.canonicalId,
+      name: r.name,
+      lat: r.lat,
+      lon: r.lon,
+    }));
+    const edges: TopoEdge[] = observedLinks.map((l) => ({
+      aId: l.sourceId,
+      bId: l.targetId,
+      kind: 'observed' as const,
+    }));
+    if (site) {
+      nodes.push({ id: '__planned', name: 'Proposed site', lat: site.lat, lon: site.lon });
+      for (const r of assess.results) {
+        if (r.classification === 'likely' || r.classification === 'marginal') {
+          edges.push({ aId: '__planned', bId: r.targetId, kind: 'predicted' });
+        }
+      }
+    }
+    return { nodes, edges };
+  }, [mode, repeatersById, observedLinks, assess.results, site]);
+
+  const topologyStats = useMemo(() => (topology ? computeTopoStats(topology.nodes, topology.edges) : null), [topology]);
+
+  const removalOptions = useMemo(() => {
+    if (!site) return [];
+    return assess.results.slice(0, 25).map((r) => ({
+      id: r.targetId,
+      label: `${r.name ?? r.targetId.slice(0, 8)} (${r.distanceKm.toFixed(1)} km)`,
+    }));
+  }, [assess.results, site]);
+
+  const removal = useMemo(
+    () => (topology && removalId ? computeRemovalImpact(topology.nodes, topology.edges, removalId) : null),
+    [topology, removalId],
+  );
+
+  const runCandidates = useCallback(
+    (goal: CandidateGoal) => {
+      const client = clientRef.current;
+      const s = siteRef.current;
+      if (!client || !s) return;
+      const repeaters = [...repeatersById.values()]
+        .map((r) => ({ r, d: haversineDistanceM(s, r) }))
+        .filter((x) => x.d <= 150_000)
+        .map((x) => ({ id: x.r.canonicalId, name: x.r.name, lat: x.r.lat, lon: x.r.lon }));
+      setCandidatesState({ status: 'running', progress: null, candidates: [], screened: 0, error: null });
+      const handle = client.startCandidates(
+        {
+          site: { lat: s.lat, lon: s.lon, antennaHeightAglM: s.antennaHeightAglM },
+          halfSizeKm: 25,
+          stepPx: 24,
+          maxCandidates: 32,
+          goal,
+          rf,
+          repeaters,
+        },
+        (p) => {
+          if (candidatesJobRef.current !== p.jobId) return;
+          setCandidatesState((prev) => ({ ...prev, progress: { done: p.done, total: p.total } }));
+        },
+      );
+      candidatesJobRef.current = handle.jobId;
+      handle.done
+        .then((res) => {
+          if (candidatesJobRef.current !== handle.jobId) return;
+          setCandidatesState({
+            status: 'done',
+            progress: { done: res.evaluatedCount, total: res.screenedCount },
+            candidates: res.candidates,
+            screened: res.screenedCount,
+            error: null,
+          });
+        })
+        .catch((err: unknown) => {
+          if (candidatesJobRef.current !== handle.jobId) return;
+          setCandidatesState({
+            status: 'error',
+            progress: null,
+            candidates: [],
+            screened: 0,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+    },
+    [repeatersById, rf],
+  );
 
   // --- debug hook (used by end-to-end smoke tests) -------------------------
   useEffect(() => {
@@ -414,6 +569,16 @@ export function App() {
       mode,
       rf: { frequencyMhz: rf.frequencyMhz, txPowerDbm: rf.txPowerDbm, rxSensitivityDbm: rf.rxSensitivityDbm },
       profile: profileState.status,
+      observedLinks: observedLinks.length,
+      topology: topologyStats
+        ? {
+            components: topologyStats.componentCount,
+            nodes: topologyStats.nodeCount,
+            observed: topologyStats.observedEdgeCount,
+            predicted: topologyStats.predictedEdgeCount,
+          }
+        : null,
+      candidates: { status: candidatesState.status, count: candidatesState.candidates.length },
       map: viewRef.current?.getState() ?? null,
       coverage: {
         on: coverageOn,
@@ -425,7 +590,22 @@ export function App() {
         notices: coverageState.notices,
       },
     };
-  }, [snapshot, repeaterCount, site, assess, linkFeatures, coverageOn, coverageDetail, coverageState, mode, rf, profileState]);
+  }, [
+    snapshot,
+    repeaterCount,
+    site,
+    assess,
+    linkFeatures,
+    coverageOn,
+    coverageDetail,
+    coverageState,
+    mode,
+    rf,
+    profileState,
+    observedLinks,
+    topologyStats,
+    candidatesState,
+  ]);
 
   const snapshotAge = snapshot
     ? `${Math.max(0, Math.round((Date.now() - Date.parse(snapshot.fetchedAt)) / 60000))} min ago`
@@ -493,6 +673,11 @@ export function App() {
             <li><span className="swatch" style={{ background: '#dc2626' }} /> blocked (dashed)</li>
             <li><span className="swatch" style={{ background: '#94a3b8' }} /> unlikely (thin, optional)</li>
             <li><span className="swatch" style={{ background: '#9333ea' }} /> terrain unknown</li>
+          </ul>
+          <h3>Observed links</h3>
+          <ul>
+            <li><span className="swatch" style={{ background: '#64748b' }} /> reciprocal evidence (solid)</li>
+            <li><span className="swatch" style={{ background: '#94a3b8' }} /> one-way report (dashed)</li>
           </ul>
           <p className="muted small">Clusters show counts at low zoom; zoom in for individual repeaters.</p>
         </aside>
@@ -569,10 +754,38 @@ export function App() {
             <summary>Link budget / RF settings</summary>
             <RfEditor rf={rf} onChange={setRf} />
           </details>
-          <p className="muted small">
-            Click a repeater in the list to draw its profile from the proposed site. More advanced tools
-            (network topology, candidate search) arrive in this panel.
-          </p>
+          <details className="adv-section" open>
+            <summary>Network topology &amp; site removal</summary>
+            <TopologyPanel
+              stats={topologyStats}
+              removalOptions={removalOptions}
+              removalId={removalId}
+              removal={removal}
+              onSelectRemoval={setRemovalId}
+            />
+          </details>
+          <details className="adv-section" open>
+            <summary>Candidate site search</summary>
+            <CandidatePanel
+              state={candidatesState}
+              goal={candGoal}
+              onGoal={(g) => {
+                setCandGoal(g);
+                if (candidatesState.status === 'done') runCandidates(g);
+              }}
+              onSearch={() => runCandidates(candGoal)}
+              onView={(c) => viewRef.current?.flyToSite({ lng: c.lon, lat: c.lat })}
+              onUseAsSite={(c) => {
+                const cur = siteRef.current;
+                applySite(
+                  { lat: c.lat, lon: c.lon, antennaHeightAglM: cur?.antennaHeightAglM ?? rf.antennaHeightAglM },
+                  { pushUndo: true, debounced: true, moveMarker: true },
+                );
+                viewRef.current?.flyToSite({ lng: c.lon, lat: c.lat });
+              }}
+              disabled={!site}
+            />
+          </details>
         </section>
       ) : null}
       </div>

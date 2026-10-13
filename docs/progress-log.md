@@ -277,3 +277,29 @@ no-agents restriction, continuous execution, measure-first resources).
   site→Gateshead_StJames shows margin 46.8 dB, clearance 0.36 @ 0.4 km, 4 m
   worst obstruction; preset switch to 869.525 re-ran the assessment.
   Evidence: `evidence/stage5/adv-profile.png`.
+
+- **Stage 5 step 2 — topology, site removal, candidate search, observed links
+  (2026-10-13 ~05:35–05:55 UTC).** Advanced analysis now includes:
+  (a) **observed links** loaded on demand (snapshot `/api/v1/observed-links`,
+  bbox-bounded) and drawn as their own layer under the predicted links —
+  reciprocal evidence solid, one-way reports dashed (legend updated);
+  (b) **network topology** over all repeaters with observed + predicted edges
+  (weak components, largest component, isolated counts; pure iterative-Tarjan
+  module, 10k-node/40k-edge test) plus a **site-removal scenario** select
+  (components before/after, split-off nodes, newly-isolated list);
+  (c) **candidate-site search**: bounded worker job — high-ground screening
+  over the 50×50 km box (quantile + local-prominence scoring), fine evaluation
+  of the top 32 candidates against their nearest repeaters, deterministic
+  ranking with explainable factors for goals reach/resilience/balanced
+  (`advanced/candidates.ts` + hand-checked fixture, 13 tests). One candidate
+  can be applied directly as the proposed site. Verified in-browser: 12,776
+  observed links drawn; topology 8,800 nodes / 12,776 observed / 75 predicted
+  edges, 6,930 components (mostly isolated repeaters — expected), largest
+  1,862; candidate #1 (420 m ASL ridge west of Newcastle) reaches 39 repeaters
+  at ~40 dB avg top margins; applying it raised likely links 75 → 153.
+  Evidence: `evidence/stage5/adv-candidates.png`.
+- **Stage 5 scope note:** plan §5.2 items beyond the stage exit gate (bridge
+  route planner, height optimiser, feasibility/power checklists, field
+  surveys, scenario history, viewshed-vs-existing delta) remain deferred and
+  are tracked for Stage 6/7 polish; the exit gate itself (MODES/ADV tests,
+  RF suite, deterministic candidate fixtures with explainable rank) is met.

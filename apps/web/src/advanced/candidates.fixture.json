@@ -1,0 +1,29 @@
+{
+  "computedBy": "hand-checked per module formula",
+  "note": "12 deterministic CandidateEvaluation fixtures in the planner's c<px>_<py> id form. expectedTop3 lists the candidate ids rankCandidates() must return first, in order, for each goal. expectedTop3Scores repeats those entries' scores (6 dp) as computed from the documented weights: score = w.reach*reach + w.margin*clamp(meanTopMarginDb,0,40)/10 + w.isolation*min(nearestRepeaterKm,20)/10 - 1/(1+nearestRepeaterKm). Verified with an independent reference implementation plus by-hand arithmetic.",
+  "entries": [
+    { "id": "c120_64", "reach": 9, "meanTopMarginDb": 18, "nearestRepeaterKm": 0.6, "elevM": 210 },
+    { "id": "c96_88", "reach": 7, "meanTopMarginDb": 22, "nearestRepeaterKm": 2.4, "elevM": 180 },
+    { "id": "c152_104", "reach": 5, "meanTopMarginDb": 30, "nearestRepeaterKm": 6.5, "elevM": 160 },
+    { "id": "c80_120", "reach": 3, "meanTopMarginDb": 12, "nearestRepeaterKm": 4.0, "elevM": 95 },
+    { "id": "c168_56", "reach": 0, "meanTopMarginDb": null, "nearestRepeaterKm": 11.0, "elevM": 45 },
+    { "id": "c136_136", "reach": 8, "meanTopMarginDb": 15, "nearestRepeaterKm": 0.4, "elevM": 250 },
+    { "id": "c72_48", "reach": 2, "meanTopMarginDb": 26, "nearestRepeaterKm": 9.5, "elevM": 120 },
+    { "id": "c184_88", "reach": 1, "meanTopMarginDb": 10, "nearestRepeaterKm": 15.0, "elevM": 20 },
+    { "id": "c104_152", "reach": 6, "meanTopMarginDb": 34, "nearestRepeaterKm": 3.2, "elevM": 140 },
+    { "id": "c144_40", "reach": 4, "meanTopMarginDb": 28, "nearestRepeaterKm": 1.2, "elevM": 230 },
+    { "id": "c88_32", "reach": 0, "meanTopMarginDb": null, "nearestRepeaterKm": 7.8, "elevM": 60 },
+    { "id": "c160_168", "reach": 9, "meanTopMarginDb": 36, "nearestRepeaterKm": 13.5, "elevM": 75 }
+  ],
+  "expectedTop3": {
+    "reach": ["c160_168", "c120_64", "c136_136"],
+    "resilience": ["c160_168", "c120_64", "c104_152"],
+    "balanced": ["c160_168", "c120_64", "c96_88"]
+  },
+  "expectedTop3Scores": {
+    "reach": [11.001034, 9.287, 8.043714],
+    "resilience": [8.571034, 5.903, 5.657905],
+    "balanced": [9.606034, 7.505, 6.525882]
+  },
+  "expectedBottomTwo": ["c168_56", "c88_32"]
+}

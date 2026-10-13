@@ -106,5 +106,5 @@ describe('wasm coverage core parity vs the CPU oracle', () => {
     // Sanity: the synthetic ridge must produce a mix of classifications.
     const codes = new Set(Array.from(cpu.codes));
     expect(codes.size).toBeGreaterThan(1);
-  });
+  }, 60_000); // heavy integration test (two full 128x128 runs)
 });
