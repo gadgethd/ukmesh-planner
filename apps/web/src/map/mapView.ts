@@ -1,0 +1,300 @@
+/**
+ * Single MapLibre instance owner (build brief §3.2: one map, focused modules,
+ * no whole-map React re-render per move).
+ *
+ * Layers: basemap (OpenFreeMap, no key), Terrarium terrain + hillshade from
+ * our own /terrain-tiles/, clustered repeater pins coloured by freshness,
+ * planned-site marker (draggable), and assessed-link lines.
+ */
+import {
+  AttributionControl,
+  GeoJSONSource,
+  Map as MapLibreMap,
+  Marker,
+  NavigationControl,
+  ScaleControl,
+} from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import type { FeatureCollection, LineString, Point } from 'geojson';
+import type { PlannerRepeater } from '@ukmesh-planner/contracts';
+import { freshnessBucket, type FreshnessBucket } from '../lib/freshness.js';
+
+export const STYLE_LIGHT = 'https://tiles.openfreemap.org/styles/positron';
+export const STYLE_DARK = 'https://tiles.openfreemap.org/styles/dark';
+
+export type Theme = 'light' | 'dark';
+
+export const REPEATER_COLORS = {
+  fresh: '#15803d',
+  recent: '#65a30d',
+  stale: '#d97706',
+  long: '#9ca3af',
+} as const satisfies Record<FreshnessBucket, string>;
+
+export const LINK_COLORS = {
+  likely: '#15803d',
+  marginal: '#d97706',
+  unlikely: '#94a3b8',
+  blocked: '#dc2626',
+  'unknown-terrain': '#9333ea',
+} as const;
+
+export interface MapViewCallbacks {
+  onMapClick: (lngLat: { lng: number; lat: number }) => void;
+  onSiteDrag: (lngLat: { lng: number; lat: number }) => void;
+  onSiteDragEnd: (lngLat: { lng: number; lat: number }) => void;
+}
+
+export class MapView {
+  readonly map: MapLibreMap;
+  private siteMarker: Marker | null = null;
+  private overlaysReady = false;
+  private repeaterClickBound = false;
+  private pendingRepeaters: FeatureCollection<Point> | null = null;
+  private pendingLinks: FeatureCollection<LineString> | null = null;
+  private theme: Theme = 'light';
+
+  constructor(
+    container: HTMLElement,
+    bounds: [number, number, number, number],
+    private readonly cb: MapViewCallbacks,
+  ) {
+    this.map = new MapLibreMap({
+      container,
+      style: STYLE_LIGHT,
+      bounds,
+      fitBoundsOptions: { padding: 32 },
+      maxZoom: 15,
+      attributionControl: false,
+    });
+    this.map.addControl(new NavigationControl({ visualizePitch: false }), 'top-left');
+    this.map.addControl(new ScaleControl({ maxWidth: 120, unit: 'metric' }), 'bottom-left');
+    this.map.addControl(
+      new AttributionControl({
+        compact: true,
+        customAttribution: [
+          'Terrain: OS Terrain 50 (via UK Mesh)',
+          'Repeater data: UK Mesh',
+        ],
+      }),
+    );
+
+    this.map.on('load', () => {
+      this.installTerrain();
+      this.installOverlays();
+    });
+    this.map.on('click', (e) => this.cb.onMapClick({ lng: e.lngLat.lng, lat: e.lngLat.lat }));
+  }
+
+  private installTerrain(): void {
+    if (this.map.getSource('terrain-dem')) return;
+    this.map.addSource('terrain-dem', {
+      type: 'raster-dem',
+      tiles: ['/terrain-tiles/{z}/{x}/{y}.png'],
+      encoding: 'terrarium',
+      tileSize: 256,
+      maxzoom: 12,
+    });
+    const firstSymbol = this.map.getStyle().layers?.find((l) => l.type === 'symbol')?.id;
+    this.map.addLayer(
+      {
+        id: 'terrain-hillshade',
+        type: 'hillshade',
+        source: 'terrain-dem',
+        paint: {
+          'hillshade-exaggeration': 0.3,
+          'hillshade-shadow-color': 'rgba(50,50,60,0.35)',
+        },
+      },
+      firstSymbol,
+    );
+    this.map.setTerrain({ source: 'terrain-dem', exaggeration: 1.3 });
+  }
+
+  private installOverlays(): void {
+    if (this.overlaysReady) return;
+    if (!this.map.getSource('repeaters')) {
+      this.map.addSource('repeaters', {
+        type: 'geojson',
+        data: this.pendingRepeaters ?? { type: 'FeatureCollection', features: [] },
+        cluster: true,
+        clusterRadius: 44,
+        clusterMaxZoom: 9,
+      });
+      this.map.addLayer({
+        id: 'repeater-clusters',
+        type: 'circle',
+        source: 'repeaters',
+        filter: ['has', 'point_count'],
+        paint: {
+          'circle-color': '#334155',
+          'circle-opacity': 0.85,
+          'circle-radius': ['step', ['get', 'point_count'], 14, 25, 18, 100, 24],
+          'circle-stroke-width': 1.5,
+          'circle-stroke-color': '#f8fafc',
+        },
+      });
+      this.map.addLayer({
+        id: 'repeater-cluster-count',
+        type: 'symbol',
+        source: 'repeaters',
+        filter: ['has', 'point_count'],
+        layout: {
+          'text-field': ['get', 'point_count_abbreviated'],
+          'text-font': ['Open Sans Regular'],
+          'text-size': 11,
+        },
+        paint: { 'text-color': '#f8fafc' },
+      });
+      this.map.addLayer({
+        id: 'repeater-points',
+        type: 'circle',
+        source: 'repeaters',
+        filter: ['!', ['has', 'point_count']],
+        paint: {
+          'circle-color': [
+            'match',
+            ['get', 'bucket'],
+            'fresh', REPEATER_COLORS.fresh,
+            'recent', REPEATER_COLORS.recent,
+            'stale', REPEATER_COLORS.stale,
+            REPEATER_COLORS.long,
+          ],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 3.5, 13, 6.5],
+          'circle-stroke-width': 1,
+          'circle-stroke-color': '#ffffff',
+        },
+      });
+      if (!this.repeaterClickBound) {
+        this.repeaterClickBound = true;
+        this.map.on('click', 'repeater-points', (e) => {
+          const f = e.features?.[0];
+          if (f) {
+            const coords = (f.geometry as Point).coordinates;
+            const lng = coords[0] ?? 0;
+            const lat = coords[1] ?? 0;
+            this.map.flyTo({ center: [lng, lat], zoom: Math.max(this.map.getZoom(), 11) });
+          }
+        });
+      }
+    }
+    if (!this.map.getSource('links')) {
+      this.map.addSource('links', {
+        type: 'geojson',
+        data: this.pendingLinks ?? { type: 'FeatureCollection', features: [] },
+      });
+      this.map.addLayer({
+        id: 'links-line',
+        type: 'line',
+        source: 'links',
+        filter: ['in', ['get', 'classification'], ['literal', ['likely', 'unlikely']]],
+        paint: {
+          'line-color': [
+            'match',
+            ['get', 'classification'],
+            'likely', LINK_COLORS.likely,
+            'unlikely', LINK_COLORS.unlikely,
+            LINK_COLORS['unknown-terrain'],
+          ],
+          'line-width': ['match', ['get', 'classification'], 'likely', 2.4, 1.4],
+          'line-opacity': 0.9,
+        },
+        layout: {
+          'line-cap': 'round',
+        },
+      });
+      // Dashed layer keeps marginal/blocked/unknown distinct without relying on
+      // colour alone (build brief §5.3).
+      this.map.addLayer({
+        id: 'links-dashed',
+        type: 'line',
+        source: 'links',
+        filter: ['in', ['get', 'classification'], ['literal', ['marginal', 'blocked', 'unknown-terrain']]],
+        paint: {
+          'line-color': [
+            'match',
+            ['get', 'classification'],
+            'marginal', LINK_COLORS.marginal,
+            'blocked', LINK_COLORS.blocked,
+            LINK_COLORS['unknown-terrain'],
+          ],
+          'line-width': ['match', ['get', 'classification'], 'blocked', 2, 1.8],
+          'line-opacity': 0.95,
+          'line-dasharray': [2.5, 2],
+        },
+        layout: {
+          'line-cap': 'butt',
+        },
+      });
+    }
+    this.overlaysReady = true;
+  }
+
+  setRepeaters(repeaters: PlannerRepeater[]): void {
+    const features = repeaters.map((r) => ({
+      type: 'Feature' as const,
+      geometry: { type: 'Point' as const, coordinates: [r.lon, r.lat] },
+      properties: {
+        id: r.canonicalId,
+        name: r.name ?? '',
+        bucket: freshnessBucket(r.lastSeen),
+        online: r.isOnline,
+      },
+    }));
+    this.pendingRepeaters = { type: 'FeatureCollection', features };
+    const src = this.map.getSource('repeaters') as GeoJSONSource | undefined;
+    if (src) src.setData(this.pendingRepeaters);
+  }
+
+  setLinks(features: FeatureCollection<LineString>): void {
+    this.pendingLinks = features;
+    const src = this.map.getSource('links') as GeoJSONSource | undefined;
+    if (src) src.setData(features);
+  }
+
+  setPlannedSite(lngLat: { lng: number; lat: number } | null): void {
+    if (!lngLat) {
+      this.siteMarker?.remove();
+      this.siteMarker = null;
+      return;
+    }
+    if (!this.siteMarker) {
+      const el = document.createElement('div');
+      el.className = 'site-marker';
+      el.setAttribute('aria-label', 'proposed repeater site');
+      this.siteMarker = new Marker({ element: el, draggable: true })
+        .setLngLat([lngLat.lng, lngLat.lat])
+        .addTo(this.map);
+      this.siteMarker.on('drag', () => {
+        const p = this.siteMarker?.getLngLat();
+        if (p) this.cb.onSiteDrag({ lng: p.lng, lat: p.lat });
+      });
+      this.siteMarker.on('dragend', () => {
+        const p = this.siteMarker?.getLngLat();
+        if (p) this.cb.onSiteDragEnd({ lng: p.lng, lat: p.lat });
+      });
+    } else {
+      this.siteMarker.setLngLat([lngLat.lng, lngLat.lat]);
+    }
+  }
+
+  flyToSite(lngLat: { lng: number; lat: number }): void {
+    this.map.flyTo({ center: [lngLat.lng, lngLat.lat], zoom: Math.max(this.map.getZoom(), 10.5) });
+  }
+
+  setTheme(theme: Theme): void {
+    if (theme === this.theme) return;
+    this.theme = theme;
+    this.overlaysReady = false;
+    this.map.setStyle(theme === 'light' ? STYLE_LIGHT : STYLE_DARK);
+    this.map.once('styledata', () => {
+      this.installTerrain();
+      this.installOverlays();
+    });
+  }
+
+  getState(): { center: [number, number]; zoom: number } {
+    const c = this.map.getCenter();
+    return { center: [c.lng, c.lat], zoom: this.map.getZoom() };
+  }
+}

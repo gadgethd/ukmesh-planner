@@ -9,3 +9,5 @@ export * from './dem.js';
 export * from './los.js';
 export * from './diffraction.js';
 export * from './assess.js';
+
+export type { LinkClassification, LinkResult, RfSettings } from '@ukmesh-planner/contracts';
