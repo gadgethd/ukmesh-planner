@@ -84,6 +84,32 @@ describe('planner api (stage 1)', () => {
     await app.close();
   });
 
+  it('serves calibrated link-quality thresholds when configured', async () => {
+    const app = buildApp({
+      getCalibration: async () => ({
+        usablePathLossDb: 137.5,
+        green: 121.5,
+        amber: 129.5,
+        samples: 1234,
+        snapshotId: 'snap-test',
+      }),
+    });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/calibration' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { usablePathLossDb: number; green: number; samples: number };
+    expect(body.usablePathLossDb).toBe(137.5);
+    expect(body.green).toBeLessThan(body.usablePathLossDb);
+    expect(body.samples).toBeGreaterThan(0);
+    await app.close();
+  });
+
+  it('returns 404 for calibration when not configured', async () => {
+    const app = buildApp();
+    const res = await app.inject({ method: 'GET', url: '/api/v1/calibration' });
+    expect(res.statusCode).toBe(404);
+    await app.close();
+  });
+
   it('reports not-ready when the planner DB is unreachable', async () => {
     const app = buildApp({
       getSnapshotMeta: async () => {

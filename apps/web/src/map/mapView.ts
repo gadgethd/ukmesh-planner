@@ -12,6 +12,7 @@ import {
   Map as MapLibreMap,
   Marker,
   NavigationControl,
+  Popup,
   ScaleControl,
   setWorkerUrl,
 } from 'maplibre-gl';
@@ -86,6 +87,7 @@ export class MapView {
   private pendingRepeaters: FeatureCollection<Point> | null = null;
   private pendingSegments: Link3DSegment[] = [];
   private link3d: Link3DLayer | null = null;
+  private observedClickBound = false;
   private pendingObserved: FeatureCollection<LineString> | null = null;
   private theme: Theme = 'light';
   /** True while the built-in minimal style is displayed (no remote basemap). */
@@ -312,6 +314,37 @@ export class MapView {
         },
         beforeLinks,
       );
+    }
+    // Observed links carry the live system's own neighbour measurements —
+    // clicking one shows the recorded ITM path loss + viability + counts.
+    if (!this.observedClickBound) {
+      this.observedClickBound = true;
+      const showObserved = (e: { lngLat: { lng: number; lat: number }; features?: Array<{ properties?: Record<string, unknown> }> }): void => {
+        const props = e.features?.[0]?.properties;
+        if (!props) return;
+        const loss = typeof props.pathLossDb === 'number' ? `${props.pathLossDb.toFixed(1)} dB` : 'not computed';
+        const viable = props.viable === true ? 'viable' : props.viable === false ? 'not viable' : 'unknown';
+        const observed = typeof props.observedCount === 'number' ? props.observedCount : '?';
+        const strong = typeof props.strongCount === 'number' ? props.strongCount : '?';
+        const html = `<div class="obs-popup"><strong>Observed neighbour link</strong><br>` +
+          `ITM path loss: ${loss} · ${viable}<br>` +
+          `Observations: ${observed} (${strong} strong)<br>` +
+          `<span class="muted">Recorded by the live UK Mesh analytics simulation</span></div>`;
+        new Popup({ closeButton: true, maxWidth: '260px' })
+          .setLngLat(e.lngLat)
+          .setHTML(html)
+          .addTo(this.map);
+      };
+      this.map.on('click', 'observed-links-line', showObserved);
+      this.map.on('click', 'observed-links-oneway', showObserved);
+      for (const layer of ['observed-links-line', 'observed-links-oneway']) {
+        this.map.on('mouseenter', layer, () => {
+          this.map.getCanvas().style.cursor = 'pointer';
+        });
+        this.map.on('mouseleave', layer, () => {
+          this.map.getCanvas().style.cursor = '';
+        });
+      }
     }
     this.overlaysReady = true;
   }

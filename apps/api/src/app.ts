@@ -22,6 +22,14 @@ export interface AppDeps {
   getSnapshotMeta?: () => Promise<SnapshotMeta | null>;
   getRepeaters?: (snapshotId: string, query: RepeaterQuery) => Promise<Page<PlannerRepeater>>;
   getObservedLinks?: (snapshotId: string, query: LinkQuery) => Promise<Page<PlannerObservedLink>>;
+  /** Calibrated link-quality thresholds (from the snapshot's observed links). */
+  getCalibration?: () => Promise<{
+    usablePathLossDb: number;
+    green: number;
+    amber: number;
+    samples: number;
+    snapshotId: string;
+  }>;
   /** Plan-sharing store (stage 6); routes mount only when it is configured. */
   shareStore?: ShareStore;
   rateLimit?: { windowMs: number; max: number };
@@ -99,6 +107,17 @@ export function buildApp(deps: AppDeps = {}): FastifyInstance {
       computeBackends: ['webgpu', 'wasm', 'cpu'],
       snapshot,
     };
+  });
+
+  // Calibrated link-quality thresholds — mirrors the live system's
+  // weighted-quantile calibration over the snapshot's observed links.
+  app.get('/api/v1/calibration', async (_req, reply) => {
+    if (!deps.getCalibration) return reply.code(404).send({ error: 'not-configured' });
+    try {
+      return await deps.getCalibration();
+    } catch {
+      return reply.code(503).send({ error: 'calibration-unavailable' });
+    }
   });
 
   // Published snapshot metadata.

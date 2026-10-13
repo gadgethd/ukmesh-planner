@@ -3,6 +3,7 @@ import { Pool } from 'pg';
 import { buildApp } from './app.js';
 import { makePlannerStore } from './snapshot.js';
 import type { ShareStore } from './shares.js';
+import { calibrateFromObservedLinks } from '@ukmesh-planner/rf-core';
 
 const port = Number(process.env['PORT'] ?? 8080);
 const host = process.env['HOST'] ?? '0.0.0.0';
@@ -101,12 +102,42 @@ sharePool?.on('error', (err: Error) => {
 });
 const shareStore = sharePool ? new PgShareStore(sharePool) : null;
 
+// Calibration is derived from the snapshot's observed links and cached per
+// snapshot id — the data changes only when a new snapshot publishes.
+let calibrationCache: {
+  snapshotId: string;
+  value: { usablePathLossDb: number; green: number; amber: number; samples: number; snapshotId: string };
+} | null = null;
+
+async function getCalibration(): Promise<{
+  usablePathLossDb: number;
+  green: number;
+  amber: number;
+  samples: number;
+  snapshotId: string;
+}> {
+  if (!store) throw new Error('planner store not configured');
+  const meta = await store.getSnapshotMeta();
+  if (!meta) throw new Error('no published snapshot');
+  if (calibrationCache && calibrationCache.snapshotId === meta.id) return calibrationCache.value;
+  const rows = await store.getObservedLosses(meta.id);
+  const cal = calibrateFromObservedLinks(rows);
+  const value = { ...cal, snapshotId: meta.id };
+  calibrationCache = { snapshotId: meta.id, value };
+  console.log(
+    `[ukmesh-planner-api] calibration: samples=${cal.samples} usable=${cal.usablePathLossDb} ` +
+      `green=${cal.green} amber=${cal.amber}`,
+  );
+  return value;
+}
+
 const app = buildApp(
   store && shareStore
     ? {
         getSnapshotMeta: () => store.getSnapshotMeta(),
         getRepeaters: store.getRepeaters.bind(store),
         getObservedLinks: store.getObservedLinks.bind(store),
+        getCalibration,
         shareStore,
         rateLimit,
       }

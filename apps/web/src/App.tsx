@@ -434,7 +434,14 @@ export function App() {
     const feats: Array<{
       type: 'Feature';
       geometry: { type: 'LineString'; coordinates: Array<[number, number]> };
-      properties: { reciprocal: boolean; id: string };
+      properties: {
+        reciprocal: boolean;
+        id: string;
+        pathLossDb: number | null;
+        viable: boolean | null;
+        observedCount: number;
+        strongCount: number;
+      };
     }> = [];
     for (const l of observedLinks) {
       const a = repeatersById.get(l.sourceId);
@@ -443,7 +450,14 @@ export function App() {
       feats.push({
         type: 'Feature',
         geometry: { type: 'LineString', coordinates: [[a.lon, a.lat], [b.lon, b.lat]] },
-        properties: { reciprocal: l.countAToB > 0 && l.countBToA > 0, id: `${l.sourceId}~${l.targetId}` },
+        properties: {
+          reciprocal: l.countAToB > 0 && l.countBToA > 0,
+          id: `${l.sourceId}~${l.targetId}`,
+          pathLossDb: l.pathLossDb,
+          viable: l.itmViable === null && l.forceViable === null ? null : (l.itmViable === true || l.forceViable === true),
+          observedCount: l.observedCount,
+          strongCount: l.strongObservationCount,
+        },
       });
     }
     return { type: 'FeatureCollection', features: feats };

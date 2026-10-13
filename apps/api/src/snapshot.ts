@@ -25,6 +25,11 @@ export interface RepeaterQuery {
   cursor: string | null;
 }
 
+export interface ObservedLossRow {
+  pathLossDb: number;
+  observedCount: number;
+}
+
 export interface LinkQuery {
   /** [west, south, east, north]; null = no spatial filter (full snapshot). */
   bbox: [number, number, number, number] | null;
@@ -36,6 +41,8 @@ export interface PlannerStore {
   getSnapshotMeta(): Promise<SnapshotMeta | null>;
   getRepeaters(snapshotId: string, query: RepeaterQuery): Promise<Page<PlannerRepeater>>;
   getObservedLinks(snapshotId: string, query: LinkQuery): Promise<Page<PlannerObservedLink>>;
+  /** Path-loss rows for link-quality calibration (bounded: one snapshot). */
+  getObservedLosses(snapshotId: string): Promise<ObservedLossRow[]>;
   close(): Promise<void>;
 }
 
@@ -211,6 +218,21 @@ export function makePlannerStore(dbUrl: string): PlannerStore {
         items: page.map(mapLink),
         nextCursor: more && last ? `${last.source_id}:${last.target_id}` : null,
       };
+    },
+
+    async getObservedLosses(snapshotIdArg: string): Promise<ObservedLossRow[]> {
+      const c = await getClient();
+      // Bounded: one published snapshot's observed links, loss + count only.
+      const res = await c.query(
+        `SELECT path_loss_db, observed_count
+           FROM source_observed_links
+          WHERE snapshot_id = $1 AND path_loss_db IS NOT NULL`,
+        [snapshotIdArg],
+      );
+      return (res.rows as Array<{ path_loss_db: number; observed_count: number }>).map((r) => ({
+        pathLossDb: Number(r.path_loss_db),
+        observedCount: Number(r.observed_count),
+      }));
     },
 
     async close(): Promise<void> {
