@@ -18,6 +18,8 @@
 --   N7 '7'×64  role NULL, positioned                          -> EXCLUDED
 --   N8 '8'×64  role 2, no position                            -> EXCLUDED
 --   N9 'a'×64  repeater, network 'test', no sighting          -> EXCLUDED
+--   N10 'b'×64 prefix-registry private only (name CLEAN, but in
+--              private_node_prefixes)                          -> EXCLUDED (union source 2)
 --   Links: N1–N2 (kept), N2–N3 (kept), N1–N5 / N1–N6 / N3–N4 /
 --          N3–N7 (all dropped by endpoint filters)
 
@@ -62,8 +64,18 @@ create table node_links (
   multibyte_observed_count integer not null default 0,
   itm_path_loss_db         double precision,
   itm_viable               boolean,
+  force_viable             boolean not null default false,
   last_observed            timestamptz not null default now(),
   primary key (node_a_id, node_b_id)
+);
+
+create table private_node_prefixes (
+  node_id           text not null,
+  network           text not null,
+  prefix_size_bytes integer not null,
+  prefix            text not null,
+  updated_at        timestamptz not null default now(),
+  primary key (node_id, network, prefix_size_bytes)
 );
 
 create table public_visibility_state (
@@ -152,7 +164,7 @@ with mapped as (
   select coalesce(la.canonical_node_id, upper(btrim(l.node_a_id))) as raw_a,
          coalesce(lb.canonical_node_id, upper(btrim(l.node_b_id))) as raw_b,
          l.observed_count, l.last_observed, l.itm_path_loss_db, l.itm_viable,
-         l.count_a_to_b, l.count_b_to_a, l.multibyte_observed_count
+         l.force_viable, l.count_a_to_b, l.count_b_to_a, l.multibyte_observed_count
   from node_links l
   left join node_identity_aliases la on la.source_node_id = upper(btrim(l.node_a_id))
   left join node_identity_aliases lb on lb.source_node_id = upper(btrim(l.node_b_id))
@@ -160,7 +172,7 @@ with mapped as (
 oriented as (
   select least(raw_a, raw_b) as node_a_id,
          greatest(raw_a, raw_b) as node_b_id,
-         observed_count, last_observed, itm_path_loss_db, itm_viable,
+         observed_count, last_observed, itm_path_loss_db, itm_viable, force_viable,
          case when raw_a <= raw_b then count_a_to_b else count_b_to_a end as count_a_to_b,
          case when raw_a <= raw_b then count_b_to_a else count_a_to_b end as count_b_to_a,
          multibyte_observed_count
@@ -172,6 +184,7 @@ select node_a_id, node_b_id,
        max(last_observed) as last_observed,
        min(itm_path_loss_db) as itm_path_loss_db,
        bool_or(itm_viable) as itm_viable,
+       bool_or(force_viable) as force_viable,
        sum(count_a_to_b)::integer as count_a_to_b,
        sum(count_b_to_a)::integer as count_b_to_a,
        sum(multibyte_observed_count)::integer as multibyte_observed_count
@@ -192,7 +205,14 @@ insert into nodes (node_id, name, lat, lon, role, network, last_seen, is_online,
   (repeat('9', 64), 'Alias 🚫 Hidden',    55.2001, -2.5001, 2,    'ukmesh',    now() - interval '3 hours',   true,  'Station G2', '1.10.0', 'EDI', 1),
   (repeat('7', 64), 'Not A Repeater',    54.2000, -2.0000, null, 'ukmesh',    now() - interval '1 day',     false, null,        null,     null,   9),
   (repeat('8', 64), 'Unpositioned',      null,    null,    2,    'ukmesh',    now() - interval '2 hours',   true,  'T-Beam',    '1.9.0',  null,   3),
-  (repeat('a', 64), 'Test Node',         54.1000, -1.6000, 2,    'test',      now() - interval '6 hours',   true,  'Heltec V3', '1.10.0', 'LDS',  1);
+  (repeat('a', 64), 'Test Node',         54.1000, -1.6000, 2,    'test',      now() - interval '6 hours',   true,  'Heltec V3', '1.10.0', 'LDS',  1),
+  (repeat('b', 64), 'Prefix Only Ten',   54.6000, -1.8000, 2,    'ukmesh',    now() - interval '4 hours',   true,  'Heltec V3', '1.10.0', 'NCL',  4);
+
+-- N10: private via the prefix registry only (simulates registry/marker divergence).
+insert into private_node_prefixes (node_id, network, prefix_size_bytes, prefix) values
+  (repeat('b', 64), 'ukmesh', 1, 'BB'),
+  (repeat('b', 64), 'ukmesh', 2, 'BBBB'),
+  (repeat('b', 64), 'ukmesh', 3, 'BBBBBB');
 
 -- The alias that merges '9'×64 into canonical '6'×64 (private member).
 insert into node_identity_aliases (source_node_id, canonical_node_id)
@@ -208,4 +228,5 @@ insert into node_links (node_a_id, node_b_id, observed_count, count_a_to_b, coun
   (repeat('1', 64), repeat('5', 64),  5,  3,  2,  0, null,  null,  now() - interval '2 hours'),
   (repeat('1', 64), repeat('6', 64),  7,  4,  3,  1, null,  null,  now() - interval '3 hours'),
   (repeat('3', 64), repeat('4', 64),  2,  1,  1,  0, null,  null,  now() - interval '2 days'),
-  (repeat('3', 64), repeat('7', 64),  2,  1,  1,  0, null,  null,  now() - interval '2 days');
+  (repeat('3', 64), repeat('7', 64),  2,  1,  1,  0, null,  null,  now() - interval '2 days'),
+  (repeat('1', 64), repeat('b', 64),  4,  3,  1,  0, null,  null,  now() - interval '4 hours');

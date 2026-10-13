@@ -78,12 +78,14 @@ check "N6 alias-member-private excluded"        "0" "select count(*) from planne
 check "N7 role-null excluded"                   "0" "select count(*) from planner_export.public_repeaters_v1 where canonical_id = repeat('7',64);"
 check "N8 unpositioned excluded"                "0" "select count(*) from planner_export.public_repeaters_v1 where canonical_id = repeat('8',64);"
 check "N9 test-only excluded"                   "0" "select count(*) from planner_export.public_repeaters_v1 where canonical_id = repeat('a',64);"
+check "N10 prefix-registry-private excluded"    "0" "select count(*) from planner_export.public_repeaters_v1 where canonical_id = repeat('b',64);"
 check "links count = 2"                         "2" "select count(*) from planner_export.public_observed_links_v1;"
 check "link N1-N2 kept with counts"             "40|30|10|12" "select observed_count||'|'||count_a_to_b||'|'||count_b_to_a||'|'||strong_observation_count from planner_export.public_observed_links_v1 where source_id = repeat('1',64) and target_id = repeat('2',64);"
 check "link N2-N3 kept"                         "1" "select count(*) from planner_export.public_observed_links_v1 where source_id = repeat('2',64) and target_id = repeat('3',64);"
 check "links to direct-private dropped"         "0" "select count(*) from planner_export.public_observed_links_v1 where source_id = repeat('5',64) or target_id = repeat('5',64);"
 check "links to alias-private dropped"          "0" "select count(*) from planner_export.public_observed_links_v1 where source_id = repeat('6',64) or target_id = repeat('6',64);"
 check "links to unpublished endpoint dropped"   "0" "select count(*) from planner_export.public_observed_links_v1 where source_id = repeat('4',64) or target_id = repeat('4',64) or source_id = repeat('7',64) or target_id = repeat('7',64);"
+check "links to prefix-private dropped"         "0" "select count(*) from planner_export.public_observed_links_v1 where source_id = repeat('b',64) or target_id = repeat('b',64);"
 check "fence generation = 810"                  "810" "select generation from planner_export.visibility_fence_v1;"
 
 echo "==> reader-role permission boundaries"
@@ -101,7 +103,7 @@ echo "==> rollback proof"
 docker exec -i "$C" psql -U meshcore -d meshcore -v ON_ERROR_STOP=1 -q -f - < "$REPO/db/source-export-provision/99_rollback.sql"
 check "views removed"        "0" "select count(*) from pg_views where schemaname = 'planner_export';"
 check "role removed"         "0" "select count(*) from pg_roles where rolname = 'ukmesh_planner_reader';"
-check "source data untouched" "10" "select count(*) from nodes;"
+check "source data untouched" "11" "select count(*) from nodes;"
 
 if [ "$fail" -eq 0 ]; then
   echo "==> ALL CHECKS PASSED"
