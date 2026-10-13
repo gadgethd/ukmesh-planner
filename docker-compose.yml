@@ -39,7 +39,7 @@ services:
     restart: unless-stopped
     environment:
       PORT: "8080"
-      PLANNER_DB_URL: ${PLANNER_DB_URL:-postgres://planner:${PLANNER_DB_PASSWORD}@db:5432/planner}
+      PLANNER_DB_URL: ${PLANNER_DB_URL:?set PLANNER_DB_URL in the deploy .env}
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-https://planner.ukmesh.com}
       NODE_ENV: production
     depends_on:
@@ -77,9 +77,12 @@ services:
     restart: unless-stopped
     environment:
       SOURCE_DB_READONLY_URL: ${SOURCE_DB_READONLY_URL:?set SOURCE_DB_READONLY_URL in the deploy .env}
-      PLANNER_DB_URL: ${PLANNER_DB_URL:-postgres://planner:${PLANNER_DB_PASSWORD}@db:5432/planner}
-      SNAPSHOT_REFRESH_SECONDS: ${SNAPSHOT_REFRESH_SECONDS:-900}
-      FENCE_CHECK_SECONDS: ${FENCE_CHECK_SECONDS:-30}
+      PLANNER_DB_URL: ${PLANNER_DB_URL:?set PLANNER_DB_URL in the deploy .env}
+      INGEST_INTERVAL_MS: ${INGEST_INTERVAL_MS:-600000}
+      INGEST_JITTER_MS: ${INGEST_JITTER_MS:-60000}
+    depends_on:
+      db:
+        condition: service_healthy
     networks:
       - default
       - source

@@ -1,9 +1,12 @@
 import { buildApp } from './app.js';
+import { makeSnapshotReader } from './snapshot.js';
 
 const port = Number(process.env['PORT'] ?? 8080);
 const host = process.env['HOST'] ?? '0.0.0.0';
+const dbUrl = process.env['PLANNER_DB_URL'] ?? '';
 
-const app = buildApp();
+const reader = dbUrl ? makeSnapshotReader(dbUrl) : null;
+const app = buildApp(reader ? { getSnapshotMeta: () => reader.getSnapshotMeta() } : {});
 
 app
   .listen({ port, host })
@@ -16,3 +19,10 @@ app
     console.error('[ukmesh-planner-api] failed to start', err);
     process.exit(1);
   });
+
+async function shutdown(): Promise<void> {
+  await reader?.close();
+  process.exit(0);
+}
+process.on('SIGTERM', () => void shutdown());
+process.on('SIGINT', () => void shutdown());

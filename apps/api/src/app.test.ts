@@ -43,3 +43,44 @@ describe('planner api (stage 1)', () => {
     await app.close();
   });
 });
+
+describe('snapshot wiring', () => {
+  it('echoes the published snapshot in /readyz and /api/v1/config', async () => {
+    const app = buildApp({
+      getSnapshotMeta: async () => ({
+        id: 'snap-test-1',
+        generation: 810,
+        fetchedAt: new Date().toISOString(),
+        repeaters: 42,
+        links: 17,
+      }),
+    });
+    const ready = await app.inject({ method: 'GET', url: '/readyz' });
+    expect(ready.statusCode).toBe(200);
+    expect(ready.json().snapshot.id).toBe('snap-test-1');
+
+    const config = await app.inject({ method: 'GET', url: '/api/v1/config' });
+    expect(config.statusCode).toBe(200);
+    expect(config.json().datasetVersion).toBe('snap-test-1');
+    expect(config.json().snapshot.repeaters).toBe(42);
+    await app.close();
+  });
+
+  it('reports not-ready when the planner DB is unreachable', async () => {
+    const app = buildApp({
+      getSnapshotMeta: async () => {
+        throw new Error('connect ECONNREFUSED');
+      },
+    });
+    const ready = await app.inject({ method: 'GET', url: '/readyz' });
+    expect(ready.statusCode).toBe(200);
+    const body = ready.json();
+    expect(body.ready).toBe(false);
+    expect(body.error).toBe('planner-db-unreachable');
+
+    const config = await app.inject({ method: 'GET', url: '/api/v1/config' });
+    expect(config.statusCode).toBe(200);
+    expect(config.json().snapshot).toBeNull();
+    await app.close();
+  });
+});

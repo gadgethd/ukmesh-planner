@@ -26,22 +26,38 @@ export function buildApp(deps: AppDeps = {}): FastifyInstance {
 
   // Readiness — planner datastore / snapshot state.
   app.get('/readyz', async () => {
-    const snapshot = deps.getSnapshotMeta ? await deps.getSnapshotMeta() : null;
-    return {
-      ready: true,
-      sourceContract: SOURCE_CONTRACT_VERSION,
-      snapshot,
-    };
+    if (!deps.getSnapshotMeta) {
+      return { ready: true, sourceContract: SOURCE_CONTRACT_VERSION, snapshot: null };
+    }
+    try {
+      const snapshot = await deps.getSnapshotMeta();
+      return { ready: true, sourceContract: SOURCE_CONTRACT_VERSION, snapshot };
+    } catch {
+      return {
+        ready: false,
+        sourceContract: SOURCE_CONTRACT_VERSION,
+        snapshot: null,
+        error: 'planner-db-unreachable',
+      };
+    }
   });
 
   // Public configuration: bounds, versions, advertised compute backends.
-  app.get('/api/v1/config', async () => ({
-    bounds: DEFAULT_BOUNDS,
-    modelVersion: RF_MODEL_VERSION,
-    datasetVersion: null,
-    computeBackends: ['wasm', 'webgpu'],
-    snapshot: null,
-  }));
+  app.get('/api/v1/config', async () => {
+    let snapshot: SnapshotMeta | null = null;
+    try {
+      snapshot = deps.getSnapshotMeta ? await deps.getSnapshotMeta() : null;
+    } catch {
+      snapshot = null;
+    }
+    return {
+      bounds: DEFAULT_BOUNDS,
+      modelVersion: RF_MODEL_VERSION,
+      datasetVersion: snapshot?.id ?? null,
+      computeBackends: ['wasm', 'webgpu'],
+      snapshot,
+    };
+  });
 
   return app;
 }
