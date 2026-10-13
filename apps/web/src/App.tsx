@@ -205,7 +205,15 @@ export function App() {
       if (!client) return;
       setCoverageState((prev) => ({ ...prev, status: 'running', progress: null, error: null }));
       const handle = client.start(
-        { site: { lat: s.lat, lon: s.lon, antennaHeightAglM: s.antennaHeightAglM }, detail: coverageDetail, rf },
+        {
+          site: { lat: s.lat, lon: s.lon, antennaHeightAglM: s.antennaHeightAglM },
+          detail: coverageDetail,
+          rf,
+          // Debug/testing override (used by the WebGPU parity harness): lets a
+          // forced backend drive the UI without changing production defaults.
+          forceBackend: (window as unknown as { __plannerForceBackend?: 'webgpu' | 'cpu' | null })
+            .__plannerForceBackend ?? null,
+        },
         (p: CoverageProgressMessage) => {
           if (coverageJobRef.current !== p.jobId) return;
           setCoverageState((prev) => ({ ...prev, progress: { done: p.done, total: p.total }, backend: p.backend }));

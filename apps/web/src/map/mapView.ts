@@ -331,7 +331,25 @@ export class MapView {
     if (src) src.setData(features);
   }
 
-  private coverageUrl: string | null = null;
+  /**
+   * Retry a style mutation while MapLibre reports "Style is not done loading"
+   * (style updates — including sprite/tile bursts and theme swaps — can leave
+   * the style mid-load when an async result arrives). Bounded; returns false
+   * when the style never became ready.
+   */
+  private async withStyleReady(fn: () => void, attempts = 40, delayMs = 300): Promise<boolean> {
+    for (let i = 0; i < attempts; i += 1) {
+      try {
+        fn();
+        return true;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!/not done loading/i.test(msg)) throw err;
+        await new Promise((r) => window.setTimeout(r, delayMs));
+      }
+    }
+    return false;
+  }
 
   /**
    * Coverage raster overlay (Tier B output). `codes` uses the shared cell
@@ -344,10 +362,6 @@ export class MapView {
     if (!data) {
       if (this.map.getLayer('coverage-raster')) this.map.removeLayer('coverage-raster');
       if (this.map.getSource('coverage')) this.map.removeSource('coverage');
-      if (this.coverageUrl) {
-        URL.revokeObjectURL(this.coverageUrl);
-        this.coverageUrl = null;
-      }
       return;
     }
     const { width, height, codes, bounds } = data;
@@ -359,43 +373,55 @@ export class MapView {
       rgba[i * 4 + 2] = c[2];
       rgba[i * 4 + 3] = c[3];
     }
-    const canvas = new OffscreenCanvas(width, height);
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.putImageData(new ImageData(rgba, width, height), 0, 0);
-    const blob = await canvas.convertToBlob({ type: 'image/png' });
-    const url = URL.createObjectURL(blob);
+    // Data URL (not an object URL): synchronous, self-contained, and avoids
+    // revoke-vs-load races when rasters update while the previous one is
+    // still being decoded.
+    const url = canvas.toDataURL('image/png');
     const coordinates: Array<[number, number]> = [
       [bounds[0], bounds[3]],
       [bounds[2], bounds[3]],
       [bounds[2], bounds[1]],
       [bounds[0], bounds[1]],
     ];
-    const src = this.map.getSource('coverage') as
-      | { updateImage?: (o: { url: string; coordinates: Array<[number, number]> }) => void }
-      | undefined;
-    if (src && this.map.getLayer('coverage-raster')) {
-      const old = this.coverageUrl;
-      this.coverageUrl = url;
-      src.updateImage?.({ url, coordinates });
-      if (old) URL.revokeObjectURL(old);
-    } else {
-      this.coverageUrl = url;
-      this.map.addSource('coverage', { type: 'image', url, coordinates: coordinates as never });
-      const before = this.map.getLayer('repeater-clusters')
-        ? 'repeater-clusters'
-        : this.map.getLayer('links-line')
-          ? 'links-line'
-          : undefined;
-      this.map.addLayer(
-        {
-          id: 'coverage-raster',
-          type: 'raster',
-          source: 'coverage',
-          paint: { 'raster-opacity': 0.72, 'raster-fade-duration': 0 },
-        },
-        before,
-      );
+    const applied = await this.withStyleReady(() => {
+      const src = this.map.getSource('coverage') as
+        | { updateImage?: (o: { url: string; coordinates: Array<[number, number]> }) => void }
+        | undefined;
+      if (src && this.map.getLayer('coverage-raster')) {
+        src.updateImage?.({ url, coordinates });
+        return;
+      }
+      if (!this.map.getSource('coverage')) {
+        this.map.addSource('coverage', { type: 'image', url, coordinates: coordinates as never });
+      }
+      if (!this.map.getLayer('coverage-raster')) {
+        const before = this.map.getLayer('repeater-clusters')
+          ? 'repeater-clusters'
+          : this.map.getLayer('links-line')
+            ? 'links-line'
+            : undefined;
+        this.map.addLayer(
+          {
+            id: 'coverage-raster',
+            type: 'raster',
+            source: 'coverage',
+            paint: { 'raster-opacity': 0.72, 'raster-fade-duration': 0 },
+          },
+          before,
+        );
+      }
+    });
+    if (!applied) {
+      // Style never became ready — drop the source/layer so a later update
+      // starts clean.
+      if (this.map.getLayer('coverage-raster')) this.map.removeLayer('coverage-raster');
+      if (this.map.getSource('coverage')) this.map.removeSource('coverage');
     }
   }
 

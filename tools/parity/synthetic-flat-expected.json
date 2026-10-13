@@ -1,0 +1,22 @@
+{
+ "note": "Expected GPU output for probes/synthetic-flat-raster.js (flat 50 m DEM, site -1.6237/54.9648, 128x128 cells).",
+ "gpu_counts": [
+  5190,
+  0,
+  0,
+  11194,
+  0,
+  0
+ ],
+ "cpu_oracle_counts": [
+  5186,
+  0,
+  0,
+  11198,
+  0,
+  0
+ ],
+ "mCentre_db": 69.0,
+ "mCorner_db": 3.9,
+ "tolerance": "counts within +-8 cells of the oracle (f32 threshold noise), centre margin exact to 0.1 dB"
+}

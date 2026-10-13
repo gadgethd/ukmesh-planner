@@ -205,3 +205,47 @@ no-agents restriction, continuous execution, measure-first resources).
   350–700+), canvas sizing is correct, and the same build renders fully when
   quiet and at desktop size. Real-device mobile verification stays on the
   Stage 7 checklist. Fixture: `evidence/stage3/missing-dem-server.py`.
+
+- **Stage 4 — coverage tier + WebGPU path (2026-10-13 ~04:10–05:05 UTC).**
+  Bounded 50×50 km coverage preview behind the Simple-mode sheet: shared
+  geometry (`coverage/params.ts`), WGSL kernel (one invocation per cell,
+  Deygout-3 mirroring the CPU oracle), CPU fallback bounded at 128×128 with a
+  notice, backend auto-selection (hardware WebGPU only; software adapters
+  fall back). UI: toggle + detail selector; raster overlay on the map.
+- **Parity verification (the hard part).** Two real defects found by
+  GPU-vs-CPU diffing on real terrain, both fixed:
+  1. SwiftShader's runtime `sin`/`cos` are inaccurate (~3e-5, non-normalised —
+     norm² 1.00007) while literal (const-folded) values are exact; every
+     great-circle sample point was displaced by >200 m, wrecking terrain
+     clearance on hilly paths (665/16,384 classification mismatches). The
+     shader now implements `sin`/`cos`/`atan2` with Cody-Waite reduction +
+     Taylor polynomials (~2e-7 ≈ 1 f32 ulp) — deterministic across GPU
+     implementations (`probes/trig-accuracy.js`: pass).
+  2. `warmPath` preloaded tiles at 400 m sampling while `buildProfile`
+     samples at 90 m (60 m in Simple mode): tiles the path only corner-clipped
+     were never loaded, and `elevationAt` returned null for their samples →
+     42/16,384 spurious "unknown terrain" cells (deterministic, reproduced
+     tile-by-tile). `warmPath` now samples at exactly the profile's spacing
+     (callers pass their profile opts) → 0 unknowns.
+  Also: Deygout obstacle tops in the shader now use the full-path earth bulge
+  (mirrors the oracle's `earthBulgeAdjM`), and the WGSL NaN is a runtime
+  uniform (const-eval rejects constant NaN).
+- **Stage 4 parity result (low detail, 16,384 cells):** mean |Δmargin|
+  0.241 dB; 15/16,384 (0.092 %) classification mismatches, all boundary-class
+  (margin within 2 dB of the 15/5 dB thresholds, or one knifeEdge(v≈0) =
+  6.03 dB grazing-inclusion step at |h| < 1 m — verified per-cell in
+  `tools/parity/parity-boundary-analysis.json`); CPU runs deterministic;
+  tile health 110/110. Documented tolerance in docs/performance/benchmarks.md
+  (adjusted from the initial ≤0.3 dB proposal with this measured evidence).
+- **Stage 4 performance (software WebGPU / SwiftShader):** GPU 1.5–1.9 s vs
+  CPU 3.8–4.9 s at 128×128 (~2.5–3.3×); medium 256×256 = 65,536 cells in
+  ~18–20 s in the UI. Hardware-GPU numbers deferred to Stage 7.
+- **Stage 4 UI evidence:** coverage preview driven through the real UI with
+  the WebGPU backend forced (`window.__plannerForceBackend`), 65,536 cells
+  rendered as a raster overlay (red field + green river-valley patches) —
+  `evidence/stage4/coverage-webgpu-ui-zoom.png`; CPU fallback UI earlier:
+  `coverage-cpu-fallback.png`.
+- **Tooling committed:** `tools/parity/` (worker-level parity probe with
+  two-CPU determinism + tile-health checks, page-probe runner with
+  trig/synthetic probes, UI test script, boundary fixture) and docs
+  (`docs/performance/benchmarks.md`, `docs/rf/parity-fixtures.md`).

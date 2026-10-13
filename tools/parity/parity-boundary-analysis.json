@@ -1,0 +1,122 @@
+[
+ {
+  "idx": 6735,
+  "dKm": 7.53,
+  "gpuM": 15.0,
+  "cpuM": 15.05,
+  "gpuCode": 3,
+  "cpuCode": 0,
+  "nearHorizon_h_m": [
+   0.0025,
+   -0.2116,
+   -0.3584,
+   -0.3698,
+   -0.8676
+  ],
+  "minPositiveH_m": 0.0025
+ },
+ {
+  "idx": 6859,
+  "dKm": 6.07,
+  "gpuM": 16.45,
+  "cpuM": 14.92,
+  "gpuCode": 0,
+  "cpuCode": 3,
+  "nearHorizon_h_m": [
+   0.1394,
+   0.1526,
+   -0.1549,
+   -0.2634,
+   0.3084
+  ],
+  "minPositiveH_m": 0.1394
+ },
+ {
+  "idx": 6991,
+  "dKm": 7.09,
+  "gpuM": 20.11,
+  "cpuM": 14.09,
+  "gpuCode": 0,
+  "cpuCode": 3,
+  "nearHorizon_h_m": [
+   -0.4352,
+   0.462,
+   -0.7816,
+   0.9985
+  ],
+  "minPositiveH_m": 0.462
+ },
+ {
+  "idx": 7124,
+  "dKm": 8.66,
+  "gpuM": 9.37,
+  "cpuM": 15.68,
+  "gpuCode": 3,
+  "cpuCode": 0,
+  "nearHorizon_h_m": [
+   -0.3552,
+   0.9114
+  ],
+  "minPositiveH_m": 0.9114
+ },
+ {
+  "idx": 7255,
+  "dKm": 9.62,
+  "gpuM": 12.13,
+  "cpuM": 18.44,
+  "gpuCode": 3,
+  "cpuCode": 0,
+  "nearHorizon_h_m": [
+   0.3,
+   -0.412,
+   -0.5345,
+   0.6402
+  ],
+  "minPositiveH_m": 0.3
+ },
+ {
+  "idx": 7994,
+  "dKm": 2.22,
+  "gpuM": 21.04,
+  "cpuM": 14.88,
+  "gpuCode": 0,
+  "cpuCode": 3,
+  "nearHorizon_h_m": [
+   0.0823,
+   -0.8306
+  ],
+  "minPositiveH_m": 0.0823
+ },
+ {
+  "idx": 8273,
+  "dKm": 6.83,
+  "gpuM": 18.98,
+  "cpuM": 12.86,
+  "gpuCode": 0,
+  "cpuCode": 3,
+  "nearHorizon_h_m": [
+   -0.1112,
+   -0.115,
+   0.1618,
+   -0.2881,
+   0.4707
+  ],
+  "minPositiveH_m": 0.1618
+ },
+ {
+  "idx": 8281,
+  "dKm": 9.95,
+  "gpuM": 15.04,
+  "cpuM": 15.0,
+  "gpuCode": 0,
+  "cpuCode": 3,
+  "nearHorizon_h_m": [
+   0.0579,
+   0.6038,
+   -0.7617,
+   -0.7872,
+   0.9876
+  ],
+  "minPositiveH_m": 0.0579
+ }
+]

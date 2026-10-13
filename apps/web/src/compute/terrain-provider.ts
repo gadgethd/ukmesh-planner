@@ -3,8 +3,8 @@
  *
  * - tiles decoded to Float32 rasters, bounded cache (FIFO eviction)
  * - NODATA pixels are NaN; sampling fails closed (never substitute 0 m)
- * - `warmPath` preloads every tile a great-circle path crosses so assessLink
- *   never sees an unloaded tile as "missing terrain".
+ * - `warmPath` preloads every tile the subsequent buildProfile call will
+ *   sample (same spacing/limits => identical sample positions), so assessLink "missing terrain".
  */
 import {
   bilinearSample,
@@ -105,8 +105,20 @@ export class TerrariumTileProvider implements TerrainProvider {
     await this.loadTile({ z: DEM_ZOOM, ...tileOfGlobalPx(px, py) });
   }
 
-  async warmPath(a: LatLon, b: LatLon): Promise<void> {
-    const n = Math.max(2, Math.ceil(haversineDistanceM(a, b) / 400) + 1);
+  async warmPath(
+    a: LatLon,
+    b: LatLon,
+    opts?: { targetSpacingM?: number; minSamples?: number; maxSamples?: number },
+  ): Promise<void> {
+    // Sample at exactly the spacing the following buildProfile call uses:
+    // same n => same interpolateGreatCircle f values => identical sample
+    // positions => every tile the profile touches is loaded. Coarser
+    // sampling can skip a tile the path only corner-clips (<400 m inside),
+    // which would surface as spurious "unknown terrain" cells.
+    const target = opts?.targetSpacingM ?? 30;
+    const minSamples = opts?.minSamples ?? 32;
+    const maxSamples = opts?.maxSamples ?? 2048;
+    const n = Math.min(maxSamples, Math.max(minSamples, Math.ceil(haversineDistanceM(a, b) / target) + 1));
     const tiles = tilesForPoints(samplePath(a, b, n), DEM_ZOOM);
     await Promise.all(tiles.map((t) => this.loadTile(t)));
   }

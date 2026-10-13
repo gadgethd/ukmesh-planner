@@ -14,7 +14,13 @@ export interface CoverageKernelInput {
   site: { lat: number; lon: number; antennaHeightAglM: number };
   geometry: CoverageGeometry;
   rf: RfSettings;
-  provider: TerrainProvider & { warmPath?: (a: LatLon, b: LatLon) => Promise<void> };
+  provider: TerrainProvider & {
+    warmPath?: (
+      a: LatLon,
+      b: LatLon,
+      opts?: { targetSpacingM?: number; minSamples?: number; maxSamples?: number },
+    ) => Promise<void>;
+  };
   maxSamples?: number;
   onProgress?: (done: number, total: number) => void;
 }
@@ -57,7 +63,7 @@ export async function runCoverageCpu(input: CoverageKernelInput): Promise<Covera
         counts[CELL_OUT_OF_RANGE] = (counts[CELL_OUT_OF_RANGE] ?? 0) + 1;
         continue;
       }
-      if (provider.warmPath) await provider.warmPath(source, cell);
+      if (provider.warmPath) await provider.warmPath(source, cell, profile);
       const r = assessLink({
         provider,
         source,

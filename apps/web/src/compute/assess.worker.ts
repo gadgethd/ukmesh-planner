@@ -55,8 +55,9 @@ async function handle(req: AssessRequest): Promise<void> {
 
     const results: AssessedLink[] = [];
     let missingTerrain = 0;
+    const profile = { targetSpacingM: 60, minSamples: 24, maxSamples: 1024 };
     for (const c of req.candidates) {
-      await provider.warmPath(req.site, c);
+      await provider.warmPath(req.site, c, profile);
       const r = assessLink({
         provider,
         source: {
@@ -67,7 +68,7 @@ async function handle(req: AssessRequest): Promise<void> {
         },
         target: { id: c.id, lat: c.lat, lon: c.lon, antennaHeightAglM: req.rf.rxHeightAglM },
         rf: req.rf,
-        profile: { targetSpacingM: 60, minSamples: 24, maxSamples: 1024 },
+        profile,
       });
       if (r.classification === 'unknown-terrain') missingTerrain += 1;
       results.push({ ...r, name: c.name });

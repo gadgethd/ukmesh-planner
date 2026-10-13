@@ -127,6 +127,7 @@ export class WebGpuCoverageEngine {
       params[21] = 90; // targetSpacingM (mirrors kernel-cpu)
       params[22] = 24; // minSamples
       params[23] = 512; // maxSamples
+      params[25] = Number.NaN; // nanValue (runtime NaN for the shader)
 
       let done = 0;
       for (let row0 = 0; row0 < height; row0 += BAND_ROWS) {

@@ -41,6 +41,7 @@ struct Params {
   minSamples: f32,
   maxSamples: f32,
   rowOffset: f32,
+  nanValue: f32, // runtime NaN (constant NaN is rejected by WGSL const-eval)
 }
 
 @group(0) @binding(0) var<uniform> params: Params;
@@ -48,17 +49,96 @@ struct Params {
 @group(0) @binding(2) var<storage, read_write> outMargins: array<f32>;
 @group(0) @binding(3) var<storage, read_write> outCodes: array<u32>;
 
+
+// --- precision-safe transcendentals -----------------------------------------
+// Driver/sandbox transcendentals vary wildly in precision (SwiftShader's
+// runtime sin/cos measured ~3e-5 absolute error, non-normalised — enough to
+// displace great-circle sample points by >200 m and wreck terrain clearance
+// on hilly paths). The kernel must produce device-independent results, so
+// sin/cos/atan2 are implemented here with Cody-Waite range reduction and
+// short Taylor polynomials (accurate to ~1 ulp of f32 over our argument
+// ranges). exp/log/sqrt are left to the implementation (measured accurate).
+const HALF_PI_F: f32 = 1.5707963267948966;
+const HALF_PI_HI: f32 = 1.5707964; // f32(pi/2)
+const HALF_PI_LO: f32 = -4.371139e-8; // pi/2 - f32(pi/2)
+const INV_HALF_PI: f32 = 0.63661975; // f32(2/pi)
+const ATAN_TAN_PI_12: f32 = 0.26794919; // tan(pi/12)
+const ATAN_TAN_PI_6: f32 = 0.57735027; // tan(pi/6)
+
+fn atanPoly(v: f32) -> f32 {
+  // atan(v) for |v| <= tan(pi/12); Taylor to v^9, error < 2e-8.
+  let v2 = v * v;
+  return v * (1.0 + v2 * (-0.333333333 + v2 * (0.2 + v2 * (-0.142857143 + v2 * 0.111111111))));
+}
+
+fn atanPos(a: f32) -> f32 {
+  // atan(a) for a >= 0, any magnitude.
+  if (a > 1.0) {
+    let ia = 1.0 / a;
+    if (ia <= ATAN_TAN_PI_12) { return HALF_PI_F - atanPoly(ia); }
+    let v = (ia - ATAN_TAN_PI_6) / (1.0 + ATAN_TAN_PI_6 * ia);
+    return HALF_PI_F - (0.52359878 + atanPoly(v));
+  }
+  if (a <= ATAN_TAN_PI_12) { return atanPoly(a); }
+  let v = (a - ATAN_TAN_PI_6) / (1.0 + ATAN_TAN_PI_6 * a);
+  return 0.52359878 + atanPoly(v);
+}
+
+fn atanF(r: f32) -> f32 {
+  return select(-atanPos(-r), atanPos(r), r >= 0.0);
+}
+
+fn atan2F(y: f32, x: f32) -> f32 {
+  if (x == 0.0 && y == 0.0) { return 0.0; }
+  let ax = abs(x);
+  let ay = abs(y);
+  if (ay <= ax) {
+    let a = atanPos(abs(y / x)); // a = |atan(y/x)| >= 0
+    if (x >= 0.0) {
+      return select(-a, a, y >= 0.0); // x>0: atan2 = sign(y) * a
+    }
+    // x < 0: atan2 = pi - a (y >= 0) or a - pi (y < 0)
+    return select(a - PI_F, PI_F - a, y >= 0.0);
+  }
+  let t = atanPos(abs(x / y));
+  // y != 0 here. atan2 = sign(y) * (pi/2 - sign(x) * atan(|x/y|))
+  if (y > 0.0) {
+    return select(HALF_PI_F - t, HALF_PI_F + t, x < 0.0);
+  }
+  return select(-(HALF_PI_F + t), -(HALF_PI_F - t), x >= 0.0);
+}
+
+fn sinCosF(x: f32) -> vec2f {
+  // Returns (sin x, cos x); accurate to ~1 ulp of f32 for |x| < ~100.
+  let k = round(x * INV_HALF_PI);
+  let r = x - k * HALF_PI_HI - k * HALF_PI_LO;
+  let r2 = r * r;
+  let s = r * (1.0 + r2 * (-0.166666667 + r2 * (0.008333333 + r2 * (-0.000198413 + r2 * 0.000002756))));
+  let c = 1.0 + r2 * (-0.5 + r2 * (0.041666667 + r2 * (-0.001388889 + r2 * 0.000024802)));
+  let q = i32(k) & 3;
+  var so = s;
+  var co = c;
+  if (q == 1) { so = c; co = -s; }
+  else if (q == 2) { so = -s; co = -c; }
+  else if (q == 3) { so = -c; co = s; }
+  return vec2f(so, co);
+}
+
+fn sinF(x: f32) -> f32 { return sinCosF(x).x; }
+fn cosF(x: f32) -> f32 { return sinCosF(x).y; }
+
 fn lonLatToGlobalPx(lon: f32, lat: f32) -> vec2f {
   let x = (lon + 180.0) / 360.0 * WORLD_PX;
   let latRad = lat * PI_F / 180.0;
-  let y = (1.0 - log(tan(latRad) + 1.0 / cos(latRad)) / PI_F) / 2.0 * WORLD_PX;
+  let sc = sinCosF(latRad);
+  let y = (1.0 - log((sc.x + 1.0) / sc.y) / PI_F) / 2.0 * WORLD_PX;
   return vec2f(x, y);
 }
 
 fn globalPxToLonLat(p: vec2f) -> vec2f {
   let lon = p.x / WORLD_PX * 360.0 - 180.0;
   let nn = PI_F - 2.0 * PI_F * (p.y / WORLD_PX);
-  let lat = 180.0 / PI_F * atan(0.5 * (exp(nn) - exp(-nn)));
+  let lat = 180.0 / PI_F * atanF(0.5 * (exp(nn) - exp(-nn)));
   return vec2f(lon, lat);
 }
 
@@ -69,7 +149,9 @@ fn haversineM(a: vec2f, b: vec2f) -> f32 {
   var dLam = (b.x - a.x) * PI_F / 180.0;
   if (dLam > PI_F) { dLam -= 2.0 * PI_F; }
   if (dLam < -PI_F) { dLam += 2.0 * PI_F; }
-  let s = sin(dPhi / 2.0) * sin(dPhi / 2.0) + cos(p1) * cos(p2) * sin(dLam / 2.0) * sin(dLam / 2.0);
+  let sp = sinF(dPhi / 2.0);
+  let sl = sinF(dLam / 2.0);
+  let s = sp * sp + cosF(p1) * cosF(p2) * sl * sl;
   return 2.0 * R_EARTH_M * asin(min(1.0, sqrt(s)));
 }
 
@@ -80,16 +162,20 @@ fn slerp(a: vec2f, b: vec2f, f: f32, dRad: f32) -> vec2f {
   let l1 = a.x * PI_F / 180.0;
   let p2 = b.y * PI_F / 180.0;
   let l2 = b.x * PI_F / 180.0;
-  let sinD = sin(dRad);
-  let A = sin((1.0 - f) * dRad) / sinD;
-  let B = sin(f * dRad) / sinD;
-  let x = A * cos(p1) * cos(l1) + B * cos(p2) * cos(l2);
-  let y = A * cos(p1) * sin(l1) + B * cos(p2) * sin(l2);
-  let z = A * sin(p1) + B * sin(p2);
-  var lon = degrees(atan2(y, x));
+  let sinD = sinF(dRad);
+  let A = sinF((1.0 - f) * dRad) / sinD;
+  let B = sinF(f * dRad) / sinD;
+  let sc1 = sinCosF(p1);
+  let sc2 = sinCosF(p2);
+  let sc3 = sinCosF(l1);
+  let sc4 = sinCosF(l2);
+  let x = A * sc1.y * sc3.y + B * sc2.y * sc4.y;
+  let y = A * sc1.y * sc3.x + B * sc2.y * sc4.x;
+  let z = A * sc1.x + B * sc2.x;
+  var lon = degrees(atan2F(y, x));
   if (lon > 180.0) { lon -= 360.0; }
   if (lon < -180.0) { lon += 360.0; }
-  return vec2f(lon, degrees(atan2(z, sqrt(x * x + y * y))));
+  return vec2f(lon, degrees(atan2F(z, sqrt(x * x + y * y))));
 }
 
 fn demAt(ix: i32, iy: i32) -> f32 {
@@ -124,16 +210,21 @@ fn sampleDem(gpx: vec2f) -> f32 {
   let v10 = demAt(ox + x1, oy + y0);
   let v01 = demAt(ox + x0, oy + y1);
   let v11 = demAt(ox + x1, oy + y1);
-  if (v00 != v00 || v10 != v10 || v01 != v01 || v11 != v11) { return bitcast<f32>(0x7fc00000u); }
+  if (v00 != v00 || v10 != v10 || v01 != v01 || v11 != v11) { return params.nanValue; }
   let top = v00 * (1.0 - fx) + v10 * fx;
   let bottom = v01 * (1.0 - fx) + v11 * fx;
   return top * (1.0 - fy) + bottom * fy;
 }
 
+// WGSL has no log10 builtin; log10(x) = ln(x) / ln(10).
+fn log10f(x: f32) -> f32 {
+  return log(x) * 0.4342944819032518;
+}
+
 fn knifeEdgeLossDb(v: f32) -> f32 {
   if (v <= -0.7) { return 0.0; }
   let t = v - 0.1;
-  return 6.9 + 20.0 * log10(sqrt(t * t + 1.0) + t);
+  return 6.9 + 20.0 * log10f(sqrt(t * t + 1.0) + t);
 }
 
 @compute @workgroup_size(8, 8, 1)
@@ -154,7 +245,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let dTotal = haversineM(siteLonLat, cellLonLat);
   if (dTotal / 1000.0 > params.maxRangeKm) {
     outCodes[idx] = 5u;
-    outMargins[idx] = bitcast<f32>(0x7fc00000u);
+    outMargins[idx] = params.nanValue;
     return;
   }
 
@@ -199,7 +290,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
 
   if (!topsKnown || unknownCount > 0u) {
     outCodes[idx] = 4u;
-    outMargins[idx] = bitcast<f32>(0x7fc00000u);
+    outMargins[idx] = params.nanValue;
     return;
   }
 
@@ -232,7 +323,11 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
       let dj = d1m - dTotal * f32(i) / nf;
       if (di <= 0.0 || dj <= 0.0) { continue; }
       let lineAtI = top0 + (top1 - top0) * di / span;
-      let effT = t + di * dj / (2.0 * R_EFF_M);
+      // Mirror the CPU oracle: obstacle tops use the FULL-PATH bulge
+      // (terrainM + earthBulgeAdjM from buildProfile), not a segment-relative
+      // bulge — see rf-core/diffraction.ts.
+      let d1f = dTotal * f32(i) / nf;
+      let effT = t + d1f * (dTotal - d1f) / (2.0 * R_EFF_M);
       let h = effT - lineAtI;
       if (h <= 0.0) { continue; }
       let v = h * sqrt((2.0 * (1.0 / di + 1.0 / dj)) / lambdaM);
@@ -243,9 +338,8 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     lossDb = lossDb + knifeEdgeLossDb(bestV);
     edges = edges + 1;
 
-    let diB = dTotal * f32(bestI) / nf - d0;
-    let djB = d1m - dTotal * f32(bestI) / nf;
-    let edgeTop = prof[bestI] + diB * djB / (2.0 * R_EFF_M);
+    let d1b = dTotal * f32(bestI) / nf;
+    let edgeTop = prof[bestI] + d1b * (dTotal - d1b) / (2.0 * R_EFF_M);
     // Push right then left; pops take left first — same order as the CPU.
     segI0[segCount] = bestI; segI1[segCount] = i1; segT0[segCount] = edgeTop; segT1[segCount] = top1;
     segCount = segCount + 1;
@@ -254,7 +348,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   }
 
   let distKm = dTotal / 1000.0;
-  let fspl = 32.44 + 20.0 * log10(distKm) + 20.0 * log10(params.frequencyMhz);
+  let fspl = 32.44 + 20.0 * log10f(distKm) + 20.0 * log10f(params.frequencyMhz);
   let rxPower = params.txPowerDbm + params.txGainDbi + params.rxGainDbi - (fspl + lossDb);
   let margin = rxPower - params.rxSensitivityDbm;
 
