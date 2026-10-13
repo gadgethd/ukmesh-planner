@@ -85,13 +85,21 @@ export class ComputeClient {
     site: { lat: number; lon: number; antennaHeightAglM: number },
     candidates: AssessCandidate[],
     rf: RfSettings,
+    usablePathLossDb?: number,
   ): AssessHandle {
     this.nextJob += 1;
     const jobId = this.nextJob;
     const done = new Promise<AssessResponse>((resolve, reject) => {
       this.pending.set(jobId, { resolve: (r) => resolve(r as AssessResponse), reject });
     });
-    const req: AssessRequest = { type: 'assess', jobId, site, candidates, rf };
+    const req: AssessRequest = {
+      type: 'assess',
+      jobId,
+      site,
+      candidates,
+      rf,
+      calibration: usablePathLossDb === undefined ? undefined : { usablePathLossDb },
+    };
     this.worker.postMessage(req);
     return { jobId, done };
   }

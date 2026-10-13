@@ -329,3 +329,32 @@ no-agents restriction, continuous execution, measure-first resources).
   env, 0600, validated; runbook updated to ban `--delete`.
 - **Docs:** `docs/deployment-report.md`, `docs/operations/deploy-runbook.md`.
 - **CI:** green on every push (latest run 38350492669).
+
+## 2026-10-13 — Neighbour dB ratings: MeshCore-convention ITM + calibration
+
+Ben's steer: "the db ratings should be in how meshcore measures neighbours
+with proper simulation". Investigation found the live analytics system's own
+neighbour model (viewshed-worker rf/): ITM-style path loss (FSPL + knife-edge
+diffraction from the max Fresnel v, 4/3-earth bulge, p75 terrain roughness),
+viability = v <= 1.12 AND loss < calibrated threshold, thresholds calibrated
+from real packet-SNR-weighted quantiles of observed links.
+
+Delivered:
+- **rf-core/itm.ts** — bit-for-bit port of the live scalar model (68 golden
+  tests vs the original Python: max |TS-Python| = 0.0 across 804 values;
+  reproducible generator at tools/parity/gen-itm-golden.py).
+- **rf-core/calibration.ts** — exact mirror of the live weighted-quantile
+  calibration (step-function quantiles, q35/q65/q90+0.5, clamps, min 24).
+  Documented deviation: neutral SNR weight until median SNR is exposed in the
+  export view.
+- **API** — GET /api/v1/calibration (per-snapshot, cached). Live now:
+  samples=37,274, usable=139.5 dB, green=130 (data-driven).
+- **Worker/UI** — every predicted link now carries ITM path loss + viability
+  + band; result rows show the ITM dB figure with a viable/not-viable chip;
+  3D link colours follow the live bands; default view = viable links only
+  (non-viable appear via "Show blocked links"). Observed links gained a click
+  popup with the live system's recorded path loss + viability.
+- Verified live: rows read e.g. "0.2 km · 87 dB · viable · likely" (FSPL at
+  200 m ≈ 77 dB + roughness/diffraction — consistent); 7 viable of 300
+  candidates at the Newcastle test point (stricter and more realistic than
+  the previous margin model, as Ben asked).

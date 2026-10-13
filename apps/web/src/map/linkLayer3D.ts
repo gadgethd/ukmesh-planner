@@ -30,6 +30,10 @@ const DEFAULT_COLORS: Record<string, string> = {
   marginal: '#d97706',
   blocked: '#dc2626',
   'unknown-terrain': '#9333ea',
+  // MeshCore-convention ITM bands (same palette as the live system).
+  green: '#15803d',
+  amber: '#d97706',
+  red: '#dc2626',
 };
 
 export class Link3DLayer implements CustomLayerInterface {

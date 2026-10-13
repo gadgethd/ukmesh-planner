@@ -332,3 +332,8 @@ label:focus-visible {
 /* ---------- observed link popup ---------- */
 .obs-popup { font: 12.5px/1.5 system-ui, sans-serif; }
 .obs-popup .muted { color: #64748b; font-size: 11.5px; }
+
+/* ITM viability chips (MeshCore convention) */
+.chip--itm-green { background: #dcfce7; color: #166534; }
+.chip--itm-amber { background: #fef3c7; color: #92400e; }
+.chip--itm-red { background: #fee2e2; color: #991b1b; }

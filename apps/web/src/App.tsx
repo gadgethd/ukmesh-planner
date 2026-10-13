@@ -78,6 +78,7 @@ export function App() {
   const [assess, setAssess] = useState<AssessUiState>(EMPTY_ASSESS);
   const [showAllLinks, setShowAllLinks] = useState(false);
   const [is3d, setIs3d] = useState(false);
+  const calibrationRef = useRef<{ usablePathLossDb: number } | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [legendOpen, setLegendOpen] = useState(false);
   const [coverageOn, setCoverageOn] = useState(false);
@@ -177,6 +178,27 @@ export function App() {
     };
   }, []);
 
+  // Calibrated MeshCore-convention thresholds (from the snapshot's observed
+  // links); fetched once, tolerated failure -> model defaults.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch('/api/v1/calibration');
+        if (!res.ok) return;
+        const body = (await res.json()) as { usablePathLossDb: number };
+        if (!cancelled && Number.isFinite(body.usablePathLossDb)) {
+          calibrationRef.current = { usablePathLossDb: body.usablePathLossDb };
+        }
+      } catch {
+        /* defaults apply */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // --- assessment pipeline -------------------------------------------------
   const runAssess = useCallback(
     (s: SiteState) => {
@@ -200,6 +222,7 @@ export function App() {
         { lat: s.lat, lon: s.lon, antennaHeightAglM: s.antennaHeightAglM },
         candidates,
         rf,
+        calibrationRef.current?.usablePathLossDb,
       );
       latestJobRef.current = handle.jobId;
       handle.done
@@ -358,7 +381,12 @@ export function App() {
     const siteAltM = (assess.siteElevationM ?? 0) + site.antennaHeightAglM;
     return assess.results
       .filter((r) => {
-        if (r.classification === 'likely' || r.classification === 'marginal') return true;
+        // MeshCore-convention default: viable links only. Non-viable paths
+        // (terrain-blocked or too much path loss) appear on request.
+        if (r.itmViable === true) return true;
+        if (r.itmViable === null && (r.classification === 'likely' || r.classification === 'marginal')) {
+          return true;
+        }
         return showAllLinks;
       })
       .map((r) => {
@@ -371,7 +399,8 @@ export function App() {
             lat: rep.lat,
             altM: (r.targetGroundM ?? assess.siteElevationM ?? 0) + rf.rxHeightAglM,
           },
-          classification: r.classification,
+          // Colour by the live system's own bands when available.
+          classification: r.itmBand ?? r.classification,
         };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);

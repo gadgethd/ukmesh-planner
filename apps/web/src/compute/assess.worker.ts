@@ -5,7 +5,16 @@
  * Protocol mirrors the shared compute contract (build brief §6.3): the same
  * request/result shapes will be reused by the WebGPU tier at Stage 4.
  */
-import { assessLink, buildProfile, haversineDistanceM, type LinkResult } from '@ukmesh-planner/rf-core';
+import {
+  assessLink,
+  buildProfile,
+  haversineDistanceM,
+  computeItmPathLoss,
+  sampleItmProfile,
+  itmSignalBand,
+  type ItmSignalBand,
+  type LinkResult,
+} from '@ukmesh-planner/rf-core';
 import type { RfSettings } from '@ukmesh-planner/contracts';
 import { TerrariumTileProvider } from './terrain-provider.js';
 import { lonLatToGlobalPx, DEM_ZOOM } from '../lib/tilemath.js';
@@ -31,12 +40,22 @@ export interface AssessRequest {
   site: { lat: number; lon: number; antennaHeightAglM: number };
   candidates: AssessCandidate[];
   rf: RfSettings;
+  /** Calibrated MeshCore-convention threshold (defaults inside the model). */
+  calibration?: { usablePathLossDb: number };
 }
 
 export interface AssessedLink extends LinkResult {
   name: string | null;
   /** Ground elevation at the target, for 3D LOS rendering (null = unknown). */
   targetGroundM: number | null;
+  /**
+   * ITM path loss (dB) — the same model the live MeshCore analytics system
+   * uses for neighbour links (MeshCore-convention number). Null when terrain
+   * was unavailable along the path.
+   */
+  itmPathLossDb: number | null;
+  itmViable: boolean | null;
+  itmBand: ItmSignalBand | null;
 }
 
 export interface AssessResponse {
@@ -264,6 +283,7 @@ async function handle(req: AssessRequest): Promise<void> {
     const results: AssessedLink[] = [];
     let missingTerrain = 0;
     const profile = { targetSpacingM: 60, minSamples: 24, maxSamples: 1024 };
+    const usableThreshold = req.calibration?.usablePathLossDb;
     for (const c of req.candidates) {
       await provider.warmPath(req.site, c, profile);
       const targetGroundM = provider.elevationAt(c);
@@ -280,7 +300,30 @@ async function handle(req: AssessRequest): Promise<void> {
         profile,
       });
       if (r.classification === 'unknown-terrain') missingTerrain += 1;
-      results.push({ ...r, name: c.name, targetGroundM });
+      // MeshCore-convention neighbour metric: ITM path loss via the exact
+      // live-system model, sampled on its own linear profile convention.
+      let itmPathLossDb: number | null = null;
+      let itmViable: boolean | null = null;
+      let itmBand: ItmSignalBand | null = null;
+      if (r.classification !== 'unknown-terrain') {
+        const sampled = sampleItmProfile(
+          { lat: req.site.lat, lon: req.site.lon },
+          { lat: c.lat, lon: c.lon },
+          (lat, lon) => provider.elevationAt({ lat, lon }) ?? 0,
+        );
+        const itm = computeItmPathLoss({
+          ...sampled,
+          hTxM: (siteElevationM ?? 0) + req.site.antennaHeightAglM,
+          hRxM: (targetGroundM ?? 0) + req.rf.rxHeightAglM,
+          usableThresholdDb: usableThreshold,
+        });
+        if (Number.isFinite(itm.pathLossDb)) {
+          itmPathLossDb = itm.pathLossDb;
+          itmViable = itm.viable;
+          itmBand = itmSignalBand(itm.pathLossDb, usableThreshold);
+        }
+      }
+      results.push({ ...r, name: c.name, targetGroundM, itmPathLossDb, itmViable, itmBand });
     }
 
     const response: AssessResponse = {

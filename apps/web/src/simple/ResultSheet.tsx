@@ -204,7 +204,21 @@ export function ResultSheet(props: Props) {
                       <span className={`dot dot--${r.classification}`} aria-hidden="true" />
                       <span className="link-name">{rep?.name ?? r.name ?? r.targetId.slice(0, 8)}</span>
                       <span className="muted mono">{r.distanceKm.toFixed(1)} km</span>
-                      <span className="muted mono">{r.marginDb !== null ? `${r.marginDb.toFixed(0)} dB` : '—'}</span>
+                      <span
+                        className="muted mono"
+                        title="ITM path loss — the same model the live UK Mesh system uses for neighbour links"
+                      >
+                        {r.itmPathLossDb !== null
+                          ? `${r.itmPathLossDb.toFixed(0)} dB`
+                          : r.marginDb !== null
+                            ? `${r.marginDb.toFixed(0)} dB`
+                            : '—'}
+                      </span>
+                      {r.itmViable !== null ? (
+                        <span className={`chip chip--itm-${r.itmBand ?? 'red'}`}>
+                          {r.itmViable ? 'viable' : 'not viable'}
+                        </span>
+                      ) : null}
                       <span className={`chip chip--${r.classification}`}>{CLASS_LABEL[r.classification]}</span>
                     </button>
                   </li>

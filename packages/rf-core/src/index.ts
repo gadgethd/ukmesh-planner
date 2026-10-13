@@ -12,6 +12,16 @@ export * from './assess.js';
 
 export type { LinkClassification, LinkResult, RfSettings } from '@ukmesh-planner/contracts';
 export {
+  sampleItmProfile,
+  computeItmPathLoss,
+  itmSignalBand,
+  itmSignalThresholdsDb,
+  ITM_LINK_LOS_MAX_V,
+  ITM_PROFILE_STEP_M,
+  type ItmPathLossResult,
+  type ItmSignalBand,
+} from './itm.js';
+export {
   calibrateFromObservedLinks,
   pathLossBand,
   weightedQuantile,
