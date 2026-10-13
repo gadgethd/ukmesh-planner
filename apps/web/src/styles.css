@@ -87,11 +87,15 @@ button.ghost:hover { border-color: var(--accent); color: var(--accent); }
 }
 
 /* ---------- result sheet ---------- */
-.sheet {
+/* Sheet stack: Simple results + (in Advanced) analysis panel. */
+.sheets {
   position: absolute; z-index: 25; left: 10px; right: 10px; bottom: 10px;
-  max-height: 46vh; overflow: auto;
+  display: flex; flex-direction: column; gap: 8px; max-height: 62vh;
+}
+.sheet {
   background: var(--panel-solid); border: 1px solid var(--line); border-radius: 14px;
   box-shadow: var(--shadow); padding: 13px 15px; font-size: 13.5px;
+  overflow: auto; min-height: 0;
 }
 .sheet--hint { text-align: left; }
 .sheet--hint h2 { margin: 0 0 6px; font-size: 15px; }
@@ -178,11 +182,12 @@ button.ghost:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ---------- desktop: side panel ---------- */
 @media (min-width: 900px) {
-  .sheet {
+  .sheets {
     left: auto; right: 12px; top: 62px; bottom: 12px;
     width: 380px; max-height: none;
   }
-  .sheet--hint { left: auto; }
+  .sheet { flex: 1 1 auto; }
+  .sheet--hint { flex: 0 0 auto; }
 }
 
 /* ---------- coverage preview ---------- */
@@ -194,3 +199,42 @@ button.ghost:hover { border-color: var(--accent); color: var(--accent); }
   border: 1px solid var(--line); background: transparent; color: var(--text); cursor: pointer;
 }
 .detail-btn--active { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+
+/* ---------- mode switch ---------- */
+.mode-switch { display: flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.mode-btn {
+  font: inherit; font-size: 12.5px; padding: 4px 12px; border: 0; cursor: pointer;
+  background: transparent; color: var(--text);
+}
+.mode-btn + .mode-btn { border-left: 1px solid var(--line); }
+.mode-btn--active { background: var(--accent); color: #fff; font-weight: 600; }
+
+/* ---------- advanced: profile panel ---------- */
+.sheet--advanced h2 { font-size: 14.5px; margin: 0 0 4px; }
+.adv-empty { color: var(--muted); font-size: 12.5px; padding: 6px 0; }
+.adv-error { color: #dc2626; font-size: 12.5px; }
+.profile-panel { margin: 4px 0; }
+.profile-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; font-size: 13px; }
+.profile-head button.small { font-size: 11.5px; padding: 2px 8px; }
+.profile-svg { width: 100%; height: auto; display: block; background: rgba(100, 116, 139, 0.06); border-radius: 8px; }
+.profile-grid { stroke: var(--line); stroke-width: 0.6; }
+.profile-axis { fill: var(--muted); font-size: 9px; }
+.profile-terrain { stroke: var(--text); stroke-width: 1.6; }
+.profile-eff { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
+.profile-chord { stroke: var(--accent); stroke-width: 1.2; stroke-dasharray: 6 3; }
+.profile-fresnel { fill: rgba(59, 130, 246, 0.18); stroke: none; }
+.profile-worst { fill: #dc2626; }
+.profile-stats { list-style: none; margin: 6px 0 0; padding: 0; font-size: 12.5px; }
+.profile-stats li { margin: 2px 0; }
+
+/* ---------- advanced: rf editor ---------- */
+.adv-section { margin: 8px 0 4px; }
+.adv-section summary { cursor: pointer; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.rf-presets { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+.rf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+.rf-field { display: flex; flex-direction: column; gap: 2px; }
+.rf-field input {
+  font: inherit; font-size: 12.5px; padding: 3px 7px; border: 1px solid var(--line);
+  border-radius: 7px; background: transparent; color: var(--text); width: 100%;
+}

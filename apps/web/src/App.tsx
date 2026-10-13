@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   DEFAULT_UK_RF_SETTINGS,
   type PlannerRepeater,
+  type RfSettings,
   type SnapshotMeta,
 } from '@ukmesh-planner/contracts';
 import { haversineDistanceM } from '@ukmesh-planner/rf-core';
@@ -18,6 +19,9 @@ import { ComputeClient } from './compute/client.js';
 import { CoverageClient, type CoverageProgressMessage, type CoverageResultMessage } from './compute/coverage/client.js';
 import type { CoverageDetail } from './compute/coverage/params.js';
 import { ResultSheet, type AssessUiState, type SiteState } from './simple/ResultSheet.js';
+import { ProfilePanel, type ProfileUiState } from './advanced/ProfilePanel.js';
+import { RfEditor } from './advanced/RfEditor.js';
+import type { Mode, ProfilePair } from './plan/planState.js';
 
 const MAX_EVALUATED = 300;
 const DEBOUNCE_MS = 300;
@@ -72,7 +76,11 @@ export function App() {
     error: string | null;
   }>({ status: 'idle', progress: null, backend: null, counts: null, elapsedMs: null, notices: [], error: null });
 
-  const rf = DEFAULT_UK_RF_SETTINGS;
+  const [mode, setMode] = useState<Mode>('simple');
+  const [rf, setRf] = useState<RfSettings>({ ...DEFAULT_UK_RF_SETTINGS });
+  const [profilePair, setProfilePair] = useState<ProfilePair | null>(null);
+  const [profileState, setProfileState] = useState<ProfileUiState>({ status: 'idle', data: null, error: null });
+  const profileJobRef = useRef(0);
 
   // --- data load -----------------------------------------------------------
   useEffect(() => {
@@ -348,6 +356,43 @@ export function App() {
     viewRef.current?.setTheme(theme);
   }, [theme]);
 
+  // --- advanced: precision profile -----------------------------------------
+  useEffect(() => {
+    if (mode !== 'advanced' || !site || !profilePair) {
+      setProfileState({ status: 'idle', data: null, error: null });
+      return;
+    }
+    const client = clientRef.current;
+    if (!client) return;
+    setProfileState((prev) => ({ ...prev, status: 'running', error: null }));
+    const handle = client.startProfile(
+      { lat: site.lat, lon: site.lon, antennaHeightAglM: site.antennaHeightAglM },
+      { lat: profilePair.lat, lon: profilePair.lon, antennaHeightAglM: rf.rxHeightAglM },
+      rf,
+    );
+    profileJobRef.current = handle.jobId;
+    handle.done
+      .then((res) => {
+        if (profileJobRef.current !== handle.jobId) return;
+        setProfileState({ status: 'done', data: res, error: null });
+      })
+      .catch((err: unknown) => {
+        if (profileJobRef.current !== handle.jobId) return;
+        setProfileState({ status: 'error', data: null, error: err instanceof Error ? err.message : String(err) });
+      });
+  }, [mode, site, profilePair, rf]);
+
+  // Re-run when RF settings change (Simple and Advanced share them).
+  const rfRef = useRef(rf);
+  useEffect(() => {
+    if (rfRef.current === rf) return;
+    rfRef.current = rf;
+    const cur = siteRef.current;
+    if (!cur) return;
+    runAssess(cur);
+    if (coverageOnRef.current) runCoverageRef.current(cur);
+  }, [rf, runAssess]);
+
   // --- debug hook (used by end-to-end smoke tests) -------------------------
   useEffect(() => {
     (window as unknown as { __plannerMap?: unknown }).__plannerMap = viewRef.current?.map ?? null;
@@ -366,6 +411,9 @@ export function App() {
         siteElevationM: assess.siteElevationM,
       },
       linksDrawn: linkFeatures.features.length,
+      mode,
+      rf: { frequencyMhz: rf.frequencyMhz, txPowerDbm: rf.txPowerDbm, rxSensitivityDbm: rf.rxSensitivityDbm },
+      profile: profileState.status,
       map: viewRef.current?.getState() ?? null,
       coverage: {
         on: coverageOn,
@@ -377,7 +425,7 @@ export function App() {
         notices: coverageState.notices,
       },
     };
-  }, [snapshot, repeaterCount, site, assess, linkFeatures, coverageOn, coverageDetail, coverageState]);
+  }, [snapshot, repeaterCount, site, assess, linkFeatures, coverageOn, coverageDetail, coverageState, mode, rf, profileState]);
 
   const snapshotAge = snapshot
     ? `${Math.max(0, Math.round((Date.now() - Date.parse(snapshot.fetchedAt)) / 60000))} min ago`
@@ -400,6 +448,22 @@ export function App() {
           ) : (
             <span className="muted small">loading repeaters…</span>
           )}
+          <div className="mode-switch" role="group" aria-label="Mode">
+            <button
+              type="button"
+              className={mode === 'simple' ? 'mode-btn mode-btn--active' : 'mode-btn'}
+              onClick={() => setMode('simple')}
+            >
+              Simple
+            </button>
+            <button
+              type="button"
+              className={mode === 'advanced' ? 'mode-btn mode-btn--active' : 'mode-btn'}
+              onClick={() => setMode('advanced')}
+            >
+              Advanced
+            </button>
+          </div>
           <button type="button" className="ghost" onClick={() => setLegendOpen((v) => !v)}>
             Legend
           </button>
@@ -436,6 +500,7 @@ export function App() {
 
       <div ref={containerRef} className="map" />
 
+      <div className="sheets">
       <ResultSheet
         site={site}
         assess={assess}
@@ -472,9 +537,45 @@ export function App() {
         }}
         onFocusRepeater={(id) => {
           const rep = repeatersById.get(id);
-          if (rep) viewRef.current?.flyToSite({ lng: rep.lon, lat: rep.lat });
+          if (rep) {
+            viewRef.current?.flyToSite({ lng: rep.lon, lat: rep.lat });
+            if (mode === 'advanced') {
+              setProfilePair({
+                repeaterId: id,
+                label: rep.name ?? id,
+                lat: rep.lat,
+                lon: rep.lon,
+                antennaHeightAglM: rf.rxHeightAglM,
+              });
+            }
+          }
         }}
       />
+
+      {mode === 'advanced' ? (
+        <section className="sheet sheet--advanced" aria-label="Advanced analysis">
+          <div className="sheet-head">
+            <h2>Advanced analysis</h2>
+          </div>
+          <ProfilePanel
+            profile={profileState}
+            labelA="Proposed site"
+            labelB={profilePair?.label ?? 'no target selected'}
+            aAglM={site?.antennaHeightAglM ?? rf.antennaHeightAglM}
+            bAglM={rf.rxHeightAglM}
+            onClear={() => setProfilePair(null)}
+          />
+          <details className="adv-section" open>
+            <summary>Link budget / RF settings</summary>
+            <RfEditor rf={rf} onChange={setRf} />
+          </details>
+          <p className="muted small">
+            Click a repeater in the list to draw its profile from the proposed site. More advanced tools
+            (network topology, candidate search) arrive in this panel.
+          </p>
+        </section>
+      ) : null}
+      </div>
     </div>
   );
 }

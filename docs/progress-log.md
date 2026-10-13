@@ -262,3 +262,18 @@ no-agents restriction, continuous execution, measure-first resources).
   WASM 2.3 s vs CPU 5.7 s vs SwiftShader GPU 1.9 s at 128×128; no-GPU UI path
   auto-selected WASM and rendered the heatmap at full medium detail
   (65,536 cells) — evidence `evidence/stage4/coverage-wasm-ui.png`.
+
+- **Stage 5 step 1 — Advanced mode shell + precision profiles + RF editor
+  (2026-10-13 ~05:30–05:45 UTC).** `Simple | Advanced` switch sharing one plan
+  state (mode switch preserves site, RF edits and advanced selections —
+  `plan/planState.ts` + MODES unit tests); the advanced sheet hosts the
+  precision LOS cross-section (DTV terrain, terrain+4/3-Earth effective line,
+  antenna chord, first Fresnel band, worst-obstruction marker, clearance
+  stats, source/model notes) computed by the assess worker's new `profile`
+  request; and the shared RF editor (UK presets 868 / 869.525 / low-power,
+  editable budget fields, advisory EIRP, explicit per-repeater-preset
+  assumption). RF edits re-run assessment + coverage + profile live.
+  Verified in-browser: switch preserves state both ways; profile for
+  site→Gateshead_StJames shows margin 46.8 dB, clearance 0.36 @ 0.4 km, 4 m
+  worst obstruction; preset switch to 869.525 re-ran the assessment.
+  Evidence: `evidence/stage5/adv-profile.png`.
