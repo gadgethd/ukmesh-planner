@@ -151,6 +151,12 @@ export class Link3DLayer implements CustomLayerInterface {
     }
     this.material = material;
     this.mesh = new LineSegments2(geometry, material);
+    // Fat-line geometry stores positions in instanced attributes, so three's
+    // bounding-sphere frustum test collapses to the origin of the mercator
+    // world — far outside the camera frustum — and culls the whole mesh.
+    // These are map-space objects rendered through MapLibre's own matrix;
+    // skip three's culling entirely.
+    this.mesh.frustumCulled = false;
     this.scene.add(this.mesh);
     this.origin = origin;
   }
@@ -161,11 +167,22 @@ export class Link3DLayer implements CustomLayerInterface {
       const canvas = this.map.getCanvas();
       this.material?.resolution.set(canvas.width, canvas.height);
       const s = this.origin.unitsPerMetre;
-      const m = new THREE.Matrix4().fromArray(options.modelViewProjectionMatrix as unknown as number[]);
+      // MapLibre v6: custom layers project through
+      // `defaultProjectionData.mainMatrix`, which takes mercator [0..1]
+      // coordinates (converted to in-tile coords via tileMercatorCoords —
+      // identity for the world tile under mercator projection).
+      // `modelViewProjectionMatrix` does NOT accept mercator input in v6
+      // (drawing through it silently renders nothing).
+      const proj = options.defaultProjectionData;
+      const tmc = proj.tileMercatorCoords ?? [0, 0, 1, 1];
+      const main = new THREE.Matrix4().fromArray(proj.mainMatrix as unknown as number[]);
+      const toTile = new THREE.Matrix4()
+        .makeScale(1 / tmc[2], 1 / tmc[3], 1 / tmc[2])
+        .premultiply(new THREE.Matrix4().makeTranslation(-tmc[0], -tmc[1], 0));
       const local = new THREE.Matrix4()
         .makeTranslation(this.origin.x, this.origin.y, 0)
         .multiply(new THREE.Matrix4().makeScale(s, -s, s));
-      this.camera.projectionMatrix = m.multiply(local);
+      this.camera.projectionMatrix = main.multiply(toTile).multiply(local);
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
     } catch (err) {
