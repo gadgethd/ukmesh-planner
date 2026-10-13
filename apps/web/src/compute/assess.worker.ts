@@ -35,10 +35,15 @@ export interface AssessCandidate {
 }
 
 
-/** Visual clearance held above the ground when the sight ray would clip it. */
-const DRAWN_CLEARANCE_M = 12;
-/** Max drawn points per link (payload + geometry budget). */
-const DRAWN_PATH_POINTS = 24;
+/**
+ * Visual clearance held above the ground when the sight ray would clip it.
+ * 20 m: verified numerically against the real terrain (SO Terrain 50) — with
+ * the full-resolution profile no drawn segment comes within 2 m of the
+ * surface, so lines visibly float and can never graze/enter a hillside.
+ */
+const DRAWN_CLEARANCE_M = 20;
+/** Hard cap on drawn points per link (profiles are <= 200 by construction). */
+const DRAWN_PATH_MAX_POINTS = 200;
 
 /**
  * Build the drawn 3D path for a link from its sampled profile: the straight
@@ -57,7 +62,10 @@ export function buildDrawnPath(
   const n = profile.dists.length;
   if (n === 0) return [];
   const dTotal = profile.dists[n - 1] || 1;
-  const step = Math.max(1, Math.ceil(n / DRAWN_PATH_POINTS));
+  // Full resolution (the profile's own ~100 m spacing): downsampling lets the
+  // straight segment between two points cut under an unsampled terrain spike
+  // (measured down to 1.1 m clearance — visually grazing the hillside).
+  const step = Math.max(1, Math.ceil(n / DRAWN_PATH_MAX_POINTS));
   const out: AssessedPathPoint[] = [];
   for (let i = 0; i < n; i += step) {
     out.push(drawnPoint(i));
