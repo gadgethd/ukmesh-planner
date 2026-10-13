@@ -103,3 +103,18 @@ no-agents restriction, continuous execution, measure-first resources).
   force_viable, reader hash-join default): **32/32 green**.
 - Rollback kept ready: `db/source-export-provision/99_rollback.sql`
   (drops only the three views + schema + role; touches no source data).
+
+- **Ingester implemented + e2e green (2026-10-13).** `apps/ingest`: config /
+  logger / source (REPEATABLE READ + fence, nestloop-off, bounded timeouts) /
+  validate (fail-closed: structural checks, hard count bounds, relative guard
+  vs previously published) / planner (single-txn build → supersede → promote,
+  plus prune) / run (fence re-check with one re-fetch retry) / main (once-mode
+  and jittered loop with backoff). Unit tests 15/15; the e2e
+  (`fixtures/source/test-ingest.sh`) exercises publish, supersede and
+  floor-rejection on scratch databases — 12/12 checks; wired into CI.
+- Notable bug found & fixed by the e2e: `return promise` inside `try/finally`
+  let the finally end the pg clients while the publish transaction was still in
+  flight — the server logged an EOF abort and pg rejected the query with
+  "Connection terminated" as an uncaught crash. Fixed with `return await` plus
+  an explanatory comment; `main.ts` now also guards against uncaught
+  rejections.

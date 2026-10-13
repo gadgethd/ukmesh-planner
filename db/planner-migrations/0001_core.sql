@@ -18,7 +18,7 @@ create table if not exists source_snapshots (
   started_at        timestamptz not null default now(),
   finished_at       timestamptz,
   status            text not null default 'building'
-                    check (status in ('building', 'published', 'failed')),
+                    check (status in ('building', 'published', 'superseded', 'failed')),
   repeater_count    integer not null default 0,
   link_count        integer not null default 0,
   notes             text
@@ -58,6 +58,7 @@ create table if not exists source_observed_links (
   last_observed            timestamptz not null,
   path_loss_db             double precision,
   itm_viable               boolean,
+  force_viable             boolean,
   primary key (snapshot_id, source_id, target_id),
   check (source_id <> target_id)
 );

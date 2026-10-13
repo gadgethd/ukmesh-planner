@@ -1,8 +1,15 @@
 {
   "name": "@ukmesh-planner/ingest",
-  "version": "0.1.0-stage1",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
+  "dependencies": {
+    "@ukmesh-planner/contracts": "*",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.0"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",

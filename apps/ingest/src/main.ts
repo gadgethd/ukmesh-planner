@@ -1,36 +1,68 @@
 /**
- * Source snapshot ingester.
+ * Ingester entrypoint.
  *
- * Stage 2 implementation: reads `planner_export.public_repeaters_v1` /
- * `public_observed_links_v1` / `visibility_fence_v1` through the dedicated
- * `ukmesh_planner_reader` role (SELECT-only, ≤2 connections), validates the
- * privacy fence, and publishes sanitized snapshots into the planner datastore.
+ *   --once       run a single snapshot cycle and exit (non-zero on failure)
+ *   --dry-run    full fetch + validation, no publish
+ *   (default)    loop: interval + jitter, exponential backoff on failures
  *
- * Stage 1: configuration skeleton only — deliberately performs NO database
- * work and touches no live service. Run with `--once` for a single pass.
+ * The loop mode is what the compose service runs. SIGTERM/SIGINT stop the
+ * loop cleanly between cycles.
  */
+import { loadConfig } from './config.js';
+import { log, redactUrl } from './logger.js';
+import { runOnce } from './run.js';
 
-const once = process.argv.includes('--once');
-
-const report = {
-  service: 'ukmesh-planner-ingest',
-  stage: 'skeleton',
-  mode: once ? 'once' : 'loop',
-  configured: {
-    sourceDb: Boolean(process.env['SOURCE_DB_READONLY_URL']),
-    plannerDb: Boolean(process.env['PLANNER_DB_URL']),
-  },
-  note: 'stage-1 skeleton: no database work performed',
-};
-
-// eslint-disable-next-line no-console
-console.log(JSON.stringify(report, null, 2));
-
-if (once) {
-  process.exit(0);
-} else {
-  // Keep-alive holder for container deployments; real schedule arrives in Stage 2.
-  setInterval(() => {
-    /* scheduled ingestion lands here */
-  }, 60_000);
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+const cfg = loadConfig();
+
+log('info', 'ukmesh-planner-ingest starting', {
+  mode: cfg.once ? 'once' : 'loop',
+  dryRun: cfg.dryRun,
+  intervalMs: cfg.intervalMs,
+  jitterMs: cfg.jitterMs,
+  pruneKeep: cfg.pruneKeep,
+  sourceDb: cfg.sourceDbUrl ? redactUrl(cfg.sourceDbUrl) : null,
+  plannerDb: cfg.plannerDbUrl ? redactUrl(cfg.plannerDbUrl) : null,
+});
+
+if (cfg.once) {
+  try {
+    const result = await runOnce(cfg);
+    log(result.status === 'failed' ? 'error' : 'info', 'ingest run finished', { ...result });
+    process.exit(result.status === 'failed' ? 1 : 0);
+  } catch (err) {
+    // Belt-and-braces: runOnce is fail-closed internally, but a rejection must
+    // never escape as an uncaught top-level crash.
+    log('error', 'ingest run crashed', { error: err instanceof Error ? err.message : String(err) });
+    process.exit(1);
+  }
+}
+
+let stopping = false;
+process.on('SIGTERM', () => {
+  stopping = true;
+  log('info', 'SIGTERM received — stopping after current cycle');
+});
+process.on('SIGINT', () => {
+  stopping = true;
+  log('info', 'SIGINT received — stopping after current cycle');
+});
+
+let consecutiveFailures = 0;
+while (!stopping) {
+  const result = await runOnce(cfg);
+  const ok = result.status === 'published' || result.status === 'skipped';
+  consecutiveFailures = ok ? 0 : consecutiveFailures + 1;
+
+  const backoff = ok
+    ? cfg.intervalMs
+    : Math.min(cfg.intervalMs * 2 ** consecutiveFailures, 60 * 60_000);
+  const wait = backoff + Math.floor(Math.random() * cfg.jitterMs);
+  log('info', 'cycle complete', { status: result.status, consecutiveFailures, nextInMs: wait });
+  await sleep(wait);
+}
+log('info', 'ingest loop stopped');
+process.exit(0);

@@ -35,3 +35,17 @@ jobs:
       - uses: actions/checkout@v4
       - name: fixture-test export provisioning SQL
         run: bash fixtures/source/test-export.sh
+
+  ingest-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install (locked)
+        run: npm ci
+      - name: Ingest e2e (scratch source + planner databases)
+        run: bash fixtures/source/test-ingest.sh
