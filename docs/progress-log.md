@@ -249,3 +249,16 @@ no-agents restriction, continuous execution, measure-first resources).
   two-CPU determinism + tile-health checks, page-probe runner with
   trig/synthetic probes, UI test script, boundary fixture) and docs
   (`docs/performance/benchmarks.md`, `docs/rf/parity-fixtures.md`).
+
+- **Stage 4b — WASM CPU core (2026-10-13 ~05:05–05:25 UTC).** Tier B now has
+  its WASM backend per plan §6.2/§6.3: an AssemblyScript (f64) port of the
+  coverage kernel (`apps/web/src/compute/wasm/coverage-core.ts`, built by
+  `npm run build:wasm`, wired as prebuild/pretest), a loader/runner with no
+  AS runtime dependency, and backend selection updated — hardware WebGPU →
+  `webgpu`; no/software adapter → `wasm`; `cpu` remains the oracle and
+  fallback-of-last-resort. Verified: node parity test (0 mismatches, margins
+  < 0.01 dB over a ridge+nodata synthetic window); live four-way probe —
+  **WASM vs CPU: 0/16,384 mismatches, 0.000 dB** (bit-exact on real data),
+  WASM 2.3 s vs CPU 5.7 s vs SwiftShader GPU 1.9 s at 128×128; no-GPU UI path
+  auto-selected WASM and rendered the heatmap at full medium detail
+  (65,536 cells) — evidence `evidence/stage4/coverage-wasm-ui.png`.

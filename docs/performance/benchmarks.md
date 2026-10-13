@@ -10,14 +10,21 @@ numbers are the conservative floor.
 
 | Backend | Detail | Cells | Samples/path (avg) | Wall time |
 | --- | --- | --- | --- | --- |
-| CPU core (shared TS oracle, browser worker) | low (128 x 128) | 16,384 | ~280 | 3.8 - 4.9 s |
+| CPU core (shared TS oracle, browser worker) | low (128 x 128) | 16,384 | ~280 | 3.8 - 5.7 s |
+| WASM core (AssemblyScript, f64) | low (128 x 128) | 16,384 | ~280 | **2.2 - 2.3 s** |
 | WebGPU (SwiftShader) | low (128 x 128) | 16,384 | ~280 | **1.5 - 1.9 s** |
+| WASM core | medium (256 x 256) | 65,536 | ~280 | ~10 s (UI flow verified) |
 | WebGPU (SwiftShader) | medium (256 x 256) | 65,536 | ~280 | ~18 - 20 s |
 
-- Speed-up on a **software** rasterizer: ~2.5 - 3.3x vs the CPU core. Hardware
-  GPUs are expected to be substantially faster (to be measured at Stage 7).
-- The CPU fallback is bounded: the worker caps CPU detail at 128 x 128 cells
-  with an explicit notice ("CPU fallback computes at reduced detail ...").
+- Speed-ups at low detail: WASM ~2.4x vs the CPU core; WebGPU (software
+  rasterizer) ~2.5 - 3.3x. WASM and the software GPU are comparable (2.3 s vs
+  1.9 s) — the WASM tier is preferred for software/no-GPU environments for
+  determinism and portability, and it runs full requested detail (no
+  resolution reduction). Hardware GPUs are expected to be substantially
+  faster (to be measured at Stage 7).
+- The CPU core fallback is bounded: the worker caps CPU detail at 128 x 128
+  cells with an explicit notice ("CPU fallback computes at reduced detail
+  ..."); it remains the parity oracle and the fallback of last resort.
 - No VPS compute is used for assessments or coverage: the API only serves
   snapshot data; all RF math runs in the visitor's browser.
 
@@ -33,7 +40,9 @@ Measured on the staging site (low detail, 16,384 cells):
 
 | Metric | Value |
 | --- | --- |
-| Mean absolute margin difference | **0.241 dB** |
+| WASM vs CPU: classification mismatches | **0 / 16,384** |
+| WASM vs CPU: mean / max margin difference | **0.000 / 0.000 dB** (f64 both) |
+| Mean absolute margin difference (GPU vs CPU) | **0.241 dB** |
 | Classification mismatches | 15 / 16,384 (**0.092 %**) |
 | Mismatch classes | all boundary cases (see below) |
 | CPU unknown-terrain cells | 0 (deterministic across runs) |
@@ -73,4 +82,5 @@ measured evidence):
 
 See `tools/parity/README.md` (`wgpu-probe.py`, `ui-gpu-test.py`,
 `run-page-probe.py` + probes). UI evidence:
-`coverage-webgpu-ui-zoom.png` (Stage 4 evidence bundle).
+`coverage-webgpu-ui-zoom.png` (forced WebGPU) and `coverage-wasm-ui.png`
+(no-GPU path, WASM auto-selected) in the Stage 4 evidence bundle.

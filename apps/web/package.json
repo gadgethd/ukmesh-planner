@@ -7,7 +7,10 @@
     "typecheck": "tsc --noEmit",
     "build": "vite build",
     "dev": "vite",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "build:wasm": "asc src/compute/wasm/coverage-core.ts --config asconfig.json --target release",
+    "prebuild": "npm run build:wasm",
+    "pretest": "npm run build:wasm"
   },
   "dependencies": {
     "@ukmesh-planner/contracts": "*",
@@ -21,6 +24,8 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "@webgpu/types": "^0.1.74",
-    "vite": "^8.3.4"
+    "vite": "^8.3.4",
+    "assemblyscript": "^0.28.2",
+    "@types/node": "^22.0.0"
   }
 }

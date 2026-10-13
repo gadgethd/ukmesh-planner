@@ -19,7 +19,13 @@ exceptions with their causes.
    CPU over the same site/geometry/rf, then diffs margins and classifications.
    Expected: `verdict: pass` with mean |delta| ~0.24 dB and the mismatches
    limited to the boundary classes below.
-3. **Boundary exception fixture**
+3. **WASM core vs CPU oracle** (`tools/parity/wgpu-probe.py`, node-side
+   fixture in `apps/web/src/compute/wasm/wasm-parity.test.ts`): the WASM
+   backend must match the CPU oracle exactly. Measured: **0/16,384
+   classification mismatches and 0.000 dB margin difference** on the real
+   window (both f64); the node test asserts the same over a synthetic window
+   with ridge + nodata features.
+4. **Boundary exception fixture**
    (`tools/parity/parity-boundary-analysis.json`): the eight worst mismatch
    cells with their f64 profile analysis. Each cell has interior samples
    within ~1 m of the horizon (minimum positive clearance 2.5 mm - 0.9 m);

@@ -25,8 +25,9 @@ taxonomy, and `docs/performance/benchmarks.md` for timings.
   - `probes/synthetic-flat-raster.js` — full kernel over a synthetic flat DEM;
     compare against `synthetic-flat-expected.json`.
 - `wgpu-probe.py` — the worker-level parity probe: runs the deployed
-  coverage worker once on WebGPU and twice on the CPU over the same input and
-  reports timing, unknown-set stability, tile health and parity statistics.
+  coverage worker on WebGPU, twice on the CPU and once on the WASM core over
+  the same input and reports timing, unknown-set stability, tile health and
+  parity statistics (GPU vs CPU within tolerance; WASM vs CPU bit-exact).
   Prints `{"verdict": "pass"}` when the documented tolerance is met.
 - `ui-gpu-test.py` — drives the real UI in the WebGPU Chromium: places a site,
   enables the coverage preview with the backend forced to WebGPU, zooms in and

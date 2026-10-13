@@ -54,6 +54,7 @@ PARITY_JS = r"""
   }
   const cpuRun = await run('cpu', 'low');
   const cpuRun2 = await run('cpu', 'low');
+  const wasmRun = await run('wasm', 'low');
   out.cpuRun = cpuRun.error ? { error: cpuRun.error } : { ms: cpuRun.ms, backend: cpuRun.d.backend, counts: cpuRun.d.counts };
   const unk = (codes) => { const a = []; for (let i = 0; i < codes.length; i++) if (codes[i] === 4) a.push(i); return a; };
   const u1 = unk(cpuRun.d.codes), u2 = unk(cpuRun2.d.codes);
@@ -129,6 +130,32 @@ PARITY_JS = r"""
     };
     out.verdict = (meanDelta !== null && meanDelta <= 0.3 && mism / gm.length <= 0.0025 && boundaryOk)
       ? 'pass' : 'review';
+    // WASM tier vs the CPU oracle: f64 on both sides, so expect near-exact.
+    if (!wasmRun.error) {
+      const wm = wasmRun.d.margins, wc = wasmRun.d.codes;
+      let wMism = 0, wMax = 0, wSum = 0, wBoth = 0;
+      for (let i = 0; i < wm.length; i++) {
+        const a = wm[i], b = cm[i];
+        const aNaN = a !== a, bNaN = b !== b;
+        if (aNaN !== bNaN) wMism++;
+        else if (!aNaN) { const d2 = Math.abs(a - b); if (d2 > wMax) wMax = d2; wSum += d2; wBoth++; }
+        if (wc[i] !== cc[i]) wMism++;
+      }
+      out.wasmRun = { ms: wasmRun.ms, backend: wasmRun.d.backend, counts: wasmRun.d.counts };
+      out.wasmVsCpu = {
+        cells: wm.length,
+        maxDeltaDb: Math.round(wMax * 1000) / 1000,
+        meanDeltaDb: wBoth ? Math.round((wSum / wBoth) * 100000) / 100000 : null,
+        classificationMismatches: wMism,
+      };
+      out.verdict = (out.verdict === 'pass'
+        && wMism <= 5
+        && wBoth > 0 && wSum / wBoth <= 0.05)
+        ? 'pass' : 'review';
+    } else {
+      out.wasmRun = { error: wasmRun.error };
+      out.verdict = 'review';
+    }
   }
   return JSON.stringify(out);
 })()

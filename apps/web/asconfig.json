@@ -1,0 +1,15 @@
+{
+  "options": {
+    "runtime": "stub",
+    "exportRuntime": false,
+    "noAssert": true
+  },
+  "targets": {
+    "release": {
+      "outFile": "public/wasm/coverage-core.wasm",
+      "optimizeLevel": 3,
+      "shrinkLevel": 0,
+      "debug": false
+    }
+  }
+}

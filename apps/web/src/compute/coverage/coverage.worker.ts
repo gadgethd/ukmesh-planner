@@ -10,6 +10,7 @@ import type { RfSettings } from '@ukmesh-planner/contracts';
 import { chooseCoverageBackend, type GpuLike } from './select.js';
 import { WebGpuCoverageEngine, CoverageGpuError } from './webgpu.js';
 import { runCoverageCpu } from './kernel-cpu.js';
+import { WasmCoverageCore } from '../wasm/backend.js';
 import { coverageGeometry, COVERAGE_DETAILS, type CoverageDetail } from './params.js';
 import { TerrariumTileProvider } from '../terrain-provider.js';
 
@@ -19,7 +20,7 @@ export interface CoverageJobRequest {
   site: { lat: number; lon: number; antennaHeightAglM: number };
   detail: CoverageDetail;
   rf: RfSettings;
-  forceBackend?: 'webgpu' | 'cpu' | null;
+  forceBackend?: 'webgpu' | 'wasm' | 'cpu' | null;
   /** CPU fallback resolution ceiling (cells per side; default 128). */
   cpuMaxResolution?: number;
 }
@@ -56,8 +57,23 @@ async function handle(req: CoverageJobRequest): Promise<void> {
         return;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        notices.push(`WebGPU run failed (${msg}); re-running on the CPU core`);
+        notices.push(`WebGPU run failed (${msg}); trying the WASM core`);
         if (!(err instanceof Error)) throw err;
+      }
+    }
+
+    // WASM tier (Tier B fallback). Skipped only when the CPU core is forced.
+    if (choice.backend !== 'cpu') {
+      try {
+        const wasmOut = await runWasm(req, notices);
+        post(
+          { type: 'coverage-result', jobId: req.jobId, backend: 'wasm', ...wasmOut, elapsedMs: performance.now() - t0, notices },
+          [wasmOut.margins.buffer, wasmOut.codes.buffer],
+        );
+        return;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        notices.push(`WASM run failed (${msg}); re-running on the CPU core`);
       }
     }
 
@@ -95,6 +111,43 @@ async function handle(req: CoverageJobRequest): Promise<void> {
   } catch (err) {
     post({ type: 'coverage-error', jobId: req.jobId, error: err instanceof Error ? err.message : String(err) });
   }
+}
+
+let wasmCorePromise: Promise<WasmCoverageCore> | null = null;
+function getWasmCore(): Promise<WasmCoverageCore> {
+  if (!wasmCorePromise) {
+    wasmCorePromise = WasmCoverageCore.load();
+    // Allow a retry on the next job if the asset failed to load once.
+    wasmCorePromise.catch(() => {
+      wasmCorePromise = null;
+    });
+  }
+  return wasmCorePromise;
+}
+
+async function runWasm(
+  req: CoverageJobRequest,
+  _notices: string[],
+): Promise<{ geometry: ReturnType<typeof coverageGeometry>; margins: Float32Array; codes: Uint8Array; counts: number[] }> {
+  const geometry = coverageGeometry(req.site, req.detail);
+  await provider.warmPoint(req.site);
+  const siteElev = provider.elevationAt(req.site);
+  if (siteElev === null) throw new Error('site terrain unknown (CPU path reports per-cell unknown)');
+  const dem = await provider.windowRaster(
+    { x: geometry.centerPx.x - geometry.halfPx, y: geometry.centerPx.y - geometry.halfPx },
+    { x: geometry.centerPx.x + geometry.halfPx, y: geometry.centerPx.y + geometry.halfPx },
+  );
+  if (!dem) throw new Error('DEM window exceeds the memory budget');
+  const core = await getWasmCore();
+  const out = core.run({
+    site: req.site,
+    geometry,
+    rf: req.rf,
+    siteTopM: siteElev + req.site.antennaHeightAglM,
+    dem,
+    onProgress: (done, total) => post({ type: 'coverage-progress', jobId: req.jobId, done, total, backend: 'wasm' }),
+  });
+  return { geometry, margins: out.margins, codes: out.codes, counts: out.counts };
 }
 
 async function runGpu(

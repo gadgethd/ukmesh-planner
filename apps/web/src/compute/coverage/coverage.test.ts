@@ -40,21 +40,21 @@ describe('backend selection', () => {
     }),
   });
 
-  it('no navigator.gpu -> cpu', async () => {
-    expect((await chooseCoverageBackend(undefined)).backend).toBe('cpu');
+  it('no navigator.gpu -> wasm', async () => {
+    expect((await chooseCoverageBackend(undefined)).backend).toBe('wasm');
   });
-  it('no adapter -> cpu', async () => {
+  it('no adapter -> wasm', async () => {
     const gpu: GpuLike = { requestAdapter: async () => null };
-    expect((await chooseCoverageBackend(gpu)).backend).toBe('cpu');
+    expect((await chooseCoverageBackend(gpu)).backend).toBe('wasm');
   });
-  it('software adapter -> cpu unless forced', async () => {
-    expect((await chooseCoverageBackend(sw())).backend).toBe('cpu');
+  it('software adapter -> wasm unless forced', async () => {
+    expect((await chooseCoverageBackend(sw())).backend).toBe('wasm');
     expect((await chooseCoverageBackend(sw(), { force: 'webgpu' })).backend).toBe('webgpu');
   });
   it('hardware adapter -> webgpu', async () => {
     expect((await chooseCoverageBackend(hw())).backend).toBe('webgpu');
   });
-  it('device request failure -> cpu', async () => {
+  it('device request failure -> wasm', async () => {
     const gpu: GpuLike = {
       requestAdapter: async () => ({
         requestDevice: async () => {
@@ -62,7 +62,11 @@ describe('backend selection', () => {
         },
       }),
     };
-    expect((await chooseCoverageBackend(gpu)).backend).toBe('cpu');
+    expect((await chooseCoverageBackend(gpu)).backend).toBe('wasm');
+  });
+  it('explicit forces win', async () => {
+    expect((await chooseCoverageBackend(hw(), { force: 'cpu' })).backend).toBe('cpu');
+    expect((await chooseCoverageBackend(hw(), { force: 'wasm' })).backend).toBe('wasm');
   });
   it('detects software adapters by info hints', () => {
     expect(isSoftwareAdapter({ info: { description: 'SwiftShader Device' } })).toBe(true);

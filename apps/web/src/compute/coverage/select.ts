@@ -2,11 +2,14 @@
  * Coverage backend selection. Pure enough to unit-test with fakes; the worker
  * passes the real `navigator.gpu`.
  *
- * Policy: WebGPU is used for hardware adapters. Software adapters
- * (SwiftShader/lavapipe/llvmpipe) are slower than the CPU core for this
- * workload — documented in docs/performance/benchmarks.md — so the CPU
- * fallback is chosen for them unless the caller explicitly forces webgpu
- * (used by the parity/benchmark tooling).
+ * Policy: WebGPU is used for hardware adapters only. Software adapters
+ * (SwiftShader/lavapipe/llvmpipe) measured comparable to the WASM core for
+ * this workload (1.9 s vs 2.3 s at 128x128 — docs/performance/benchmarks.md);
+ * the WASM core is selected for them anyway because it is parity-verified
+ * and does not depend on software-WebGPU support varying by browser.
+ * Anything without a usable hardware adapter gets the WASM core; the JS CPU
+ * core (the parity oracle) is the fallback of last resort when the WASM
+ * asset cannot run, and can be forced explicitly by the parity tooling.
  */
 
 export interface GpuLike {
@@ -24,8 +27,10 @@ export interface DeviceLike {
   destroy?: () => void;
 }
 
+export type CoverageBackend = 'webgpu' | 'wasm' | 'cpu';
+
 export interface BackendChoice<TDevice = DeviceLike> {
-  backend: 'webgpu' | 'cpu';
+  backend: CoverageBackend;
   reason: string;
   adapter?: AdapterLike;
   device?: TDevice;
@@ -42,18 +47,19 @@ export function isSoftwareAdapter(adapter: Pick<AdapterLike, 'isFallbackAdapter'
 
 export async function chooseCoverageBackend<TDevice extends DeviceLike = DeviceLike>(
   gpu: GpuLike | undefined,
-  opts: { force?: 'webgpu' | 'cpu' | null } = {},
+  opts: { force?: CoverageBackend | null } = {},
 ): Promise<BackendChoice<TDevice>> {
   if (opts.force === 'cpu') return { backend: 'cpu', reason: 'forced cpu' };
-  if (!gpu) return { backend: 'cpu', reason: 'navigator.gpu unavailable' };
+  if (opts.force === 'wasm') return { backend: 'wasm', reason: 'forced wasm' };
+  if (!gpu) return { backend: 'wasm', reason: 'navigator.gpu unavailable — WASM core selected' };
   try {
     const adapter = await gpu.requestAdapter({ powerPreference: 'high-performance' });
-    if (!adapter) return { backend: 'cpu', reason: 'no WebGPU adapter' };
+    if (!adapter) return { backend: 'wasm', reason: 'no WebGPU adapter — WASM core selected' };
     const software = isSoftwareAdapter(adapter);
     if (software && opts.force !== 'webgpu') {
       return {
-        backend: 'cpu',
-        reason: `software adapter (${adapter.info?.architecture ?? 'fallback'}) — CPU core selected`,
+        backend: 'wasm',
+        reason: `software adapter (${adapter.info?.architecture ?? 'fallback'}) — WASM core selected`,
         adapter,
       };
     }
@@ -65,6 +71,9 @@ export async function chooseCoverageBackend<TDevice extends DeviceLike = DeviceL
       device,
     };
   } catch (err) {
-    return { backend: 'cpu', reason: `adapter/device request failed: ${err instanceof Error ? err.message : String(err)}` };
+    return {
+      backend: 'wasm',
+      reason: `adapter/device request failed: ${err instanceof Error ? err.message : String(err)} — WASM core selected`,
+    };
   }
 }

@@ -17,7 +17,7 @@ export interface CoverageProgressMessage {
 export interface CoverageResultMessage {
   type: 'coverage-result';
   jobId: number;
-  backend: 'webgpu' | 'cpu';
+  backend: 'webgpu' | 'wasm' | 'cpu';
   geometry: CoverageGeometry;
   margins: Float32Array;
   codes: Uint8Array;
@@ -67,7 +67,7 @@ export class CoverageClient {
       site: { lat: number; lon: number; antennaHeightAglM: number };
       detail: CoverageDetail;
       rf: CoverageJobRequest['rf'];
-      forceBackend?: 'webgpu' | 'cpu' | null;
+      forceBackend?: 'webgpu' | 'wasm' | 'cpu' | null;
     },
     onProgress?: (p: CoverageProgressMessage) => void,
   ): CoverageHandle {

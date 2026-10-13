@@ -211,7 +211,7 @@ export function App() {
           rf,
           // Debug/testing override (used by the WebGPU parity harness): lets a
           // forced backend drive the UI without changing production defaults.
-          forceBackend: (window as unknown as { __plannerForceBackend?: 'webgpu' | 'cpu' | null })
+          forceBackend: (window as unknown as { __plannerForceBackend?: 'webgpu' | 'wasm' | 'cpu' | null })
             .__plannerForceBackend ?? null,
         },
         (p: CoverageProgressMessage) => {
