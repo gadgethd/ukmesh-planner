@@ -253,3 +253,18 @@ button.ghost:hover { border-color: var(--accent); color: var(--accent); }
 .cand-rank { font-weight: 700; color: var(--accent); font-size: 13px; flex: none; }
 .cand-main { flex: 1 1 auto; font-size: 12.5px; }
 .cand-row button.small { font-size: 11.5px; padding: 2px 8px; flex: none; }
+
+/* ---------- plan save/export ---------- */
+.planio { display: flex; flex-direction: column; gap: 6px; margin: 4px 0; }
+.planio-row { display: flex; gap: 6px; }
+.planio-row input[type='text'] {
+  flex: 1 1 auto; font: inherit; font-size: 12.5px; padding: 4px 8px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--panel-solid); color: var(--text);
+}
+.planio-list { list-style: none; margin: 2px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.planio-list li { display: flex; align-items: center; gap: 8px; }
+.planio-name { font-size: 12.5px; font-weight: 600; }
+.planio-list .muted { flex: 1 1 auto; }
+.planio-import { position: relative; overflow: hidden; display: inline-flex; align-items: center; }
+.planio-import input[type='file'] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.planio-status { margin: 2px 0 0; }

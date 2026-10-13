@@ -23,6 +23,8 @@ import { ResultSheet, type AssessUiState, type SiteState } from './simple/Result
 import { ProfilePanel, type ProfileUiState } from './advanced/ProfilePanel.js';
 import { RfEditor } from './advanced/RfEditor.js';
 import { TopologyPanel } from './advanced/TopologyPanel.js';
+import { PlanIoSection } from './plan/PlanIoSection.js';
+import type { SerializedPlan } from './plan/store.js';
 import { CandidatePanel, type CandidatesUiState } from './advanced/CandidatePanel.js';
 import {
   removalImpact as computeRemovalImpact,
@@ -548,6 +550,41 @@ export function App() {
     [repeatersById, rf],
   );
 
+  const exportLinks = useMemo(
+    () =>
+      assess.results.flatMap((r) => {
+        const rep = repeatersById.get(r.targetId);
+        if (!rep) return [];
+        return [
+          {
+            targetId: r.targetId,
+            targetName: r.name,
+            targetLat: rep.lat,
+            targetLon: rep.lon,
+            classification: r.classification,
+            distanceKm: r.distanceKm,
+            marginDb: r.marginDb,
+          },
+        ];
+      }),
+    [assess.results, repeatersById],
+  );
+
+  const applySerializedPlan = useCallback(
+    (plan: SerializedPlan) => {
+      setRf(plan.rf);
+      setMode(plan.mode);
+      if (plan.site) {
+        applySite(
+          { lat: plan.site.lat, lon: plan.site.lon, antennaHeightAglM: plan.site.antennaHeightAglM },
+          { pushUndo: true, debounced: true, moveMarker: true },
+        );
+        viewRef.current?.flyToSite({ lng: plan.site.lon, lat: plan.site.lat });
+      }
+    },
+    [applySite],
+  );
+
   // --- debug hook (used by end-to-end smoke tests) -------------------------
   useEffect(() => {
     (window as unknown as { __plannerMap?: unknown }).__plannerMap = viewRef.current?.map ?? null;
@@ -737,6 +774,21 @@ export function App() {
         }}
       />
 
+      {mode === 'simple' ? (
+        <section className="sheet" aria-label="Saved plans">
+          <details className="adv-section">
+            <summary>Saved plans &amp; export</summary>
+            <PlanIoSection
+              site={site}
+              mode={mode}
+              rf={rf}
+              links={exportLinks}
+              onLoadPlan={applySerializedPlan}
+            />
+          </details>
+        </section>
+      ) : null}
+
       {mode === 'advanced' ? (
         <section className="sheet sheet--advanced" aria-label="Advanced analysis">
           <div className="sheet-head">
@@ -762,6 +814,16 @@ export function App() {
               removalId={removalId}
               removal={removal}
               onSelectRemoval={setRemovalId}
+            />
+          </details>
+          <details className="adv-section" open>
+            <summary>Saved plans &amp; export</summary>
+            <PlanIoSection
+              site={site}
+              mode={mode}
+              rf={rf}
+              links={exportLinks}
+              onLoadPlan={applySerializedPlan}
             />
           </details>
           <details className="adv-section" open>

@@ -16,11 +16,14 @@ import {
 } from '@ukmesh-planner/contracts';
 import type { LinkQuery, Page, RepeaterQuery } from './snapshot.js';
 import { makeRateLimiter } from './rateLimit.js';
+import { registerShareRoutes, type ShareStore } from './shares.js';
 
 export interface AppDeps {
   getSnapshotMeta?: () => Promise<SnapshotMeta | null>;
   getRepeaters?: (snapshotId: string, query: RepeaterQuery) => Promise<Page<PlannerRepeater>>;
   getObservedLinks?: (snapshotId: string, query: LinkQuery) => Promise<Page<PlannerObservedLink>>;
+  /** Plan-sharing store (stage 6); routes mount only when it is configured. */
+  shareStore?: ShareStore;
   rateLimit?: { windowMs: number; max: number };
 }
 
@@ -162,6 +165,10 @@ export function buildApp(deps: AppDeps = {}): FastifyInstance {
       return reply.code(503).send({ error: 'planner-db-unreachable' });
     }
   });
+
+  // Plan sharing (stage 6) — opt-in shares with TTL + revocation; mounted
+  // only when a share store is configured.
+  if (deps.shareStore) registerShareRoutes(app, deps.shareStore);
 
   return app;
 }
