@@ -175,3 +175,22 @@ patched where they diverged (newly-isolated semantics). Everything else —
 architecture, RF engine, compute tiers, UI, deployment, verification — was
 implemented and verified in the owning session. **No MissionDeck tasks were
 used; no sol@xhigh escalations were needed.**
+
+
+## Addendum (2026-10-13, post-review) — neighbour dB convention
+
+Per review feedback the planner now expresses link quality the way the live
+MeshCore analytics system measures neighbour links:
+
+- **ITM path loss** — bit-for-bit port of the live model (68 golden tests vs
+  the original Python; max |TS−Python| = 0.0). Same sampling convention
+  (linear profile, 100 m steps, 20–200 samples), same viability rule
+  (Fresnel v ≤ 1.12 AND loss < threshold).
+- **Calibrated thresholds** — `GET /api/v1/calibration` mirrors the live
+  weighted-quantile calibration over the snapshot's observed links (live:
+  37,274 samples, usable 139.5 dB, green 130). Documented deviation: SNR
+  weighting is neutral until median packet SNR is exposed in the export view.
+- **UI** — result rows show the ITM dB figure with a viable/not-viable chip;
+  3D link colours follow the live bands; default view shows viable links
+  only; clicking an observed link shows its recorded ITM path loss +
+  viability. 3D links render as floating LOS objects (see the progress log).
