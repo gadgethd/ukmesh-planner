@@ -25,6 +25,24 @@ export function tileOfGlobalPx(px: number, py: number): { x: number; y: number }
   return { x: Math.floor(px / TILE_SIZE), y: Math.floor(py / TILE_SIZE) };
 }
 
+/**
+ * Local pixel coordinates within a tile, clamped to the addressable range
+ * [0, TILE_SIZE-1]. Profile samples land in [0, TILE_SIZE); without the clamp
+ * every sample in the outer 1-px band of a tile's right/bottom edge would be
+ * rejected by bilinearSample as out of range (observed as spurious
+ * "missing terrain" on ~half of all paths).
+ */
+export function localTileCoords(
+  px: number,
+  py: number,
+  tile: { x: number; y: number },
+): { lx: number; ly: number } {
+  return {
+    lx: Math.min(Math.max(px - tile.x * TILE_SIZE, 0), TILE_SIZE - 1),
+    ly: Math.min(Math.max(py - tile.y * TILE_SIZE, 0), TILE_SIZE - 1),
+  };
+}
+
 /** Distinct tiles crossed by a set of sample points. */
 export function tilesForPoints(
   points: ReadonlyArray<{ lat: number; lon: number }>,

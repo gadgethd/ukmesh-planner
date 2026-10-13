@@ -33,16 +33,20 @@ const linkCursorSchema = z.string().regex(/^[0-9A-F]{64}:[0-9A-F]{64}$/);
 
 type Bbox = [number, number, number, number];
 
-/** Parse `bbox=w,s,e,n`; absent => default operational bounds. */
-export function parseBbox(raw: unknown): Bbox | null {
-  if (raw === undefined) return DEFAULT_BOUNDS;
-  if (typeof raw !== 'string') return null;
+/**
+ * Parse `bbox=w,s,e,n`. Absent => `{ ok: true, bbox: null }` (no spatial
+ * filter — the full published snapshot; the dataset legitimately contains
+ * repeaters outside the UK core bounds). Malformed => `{ ok: false }`.
+ */
+export function parseBbox(raw: unknown): { ok: true; bbox: Bbox | null } | { ok: false } {
+  if (raw === undefined) return { ok: true, bbox: null };
+  if (typeof raw !== 'string') return { ok: false };
   const parts = raw.split(',').map((p) => Number(p));
-  if (parts.length !== 4 || parts.some((p) => !Number.isFinite(p))) return null;
+  if (parts.length !== 4 || parts.some((p) => !Number.isFinite(p))) return { ok: false };
   const [w, s, e, n] = parts as Bbox;
-  if (s < -90 || n > 90 || w < -180 || e > 180) return null;
-  if (w >= e || s >= n) return null;
-  return [w, s, e, n];
+  if (s < -90 || n > 90 || w < -180 || e > 180) return { ok: false };
+  if (w >= e || s >= n) return { ok: false };
+  return { ok: true, bbox: [w, s, e, n] };
 }
 
 export function buildApp(deps: AppDeps = {}): FastifyInstance {
@@ -112,8 +116,8 @@ export function buildApp(deps: AppDeps = {}): FastifyInstance {
       return reply.code(503).send({ error: 'store-not-configured' });
     }
     const q = req.query as Record<string, unknown>;
-    const bbox = parseBbox(q['bbox']);
-    if (!bbox) return reply.code(400).send({ error: 'invalid-bbox' });
+    const parsed = parseBbox(q['bbox']);
+    if (!parsed.ok) return reply.code(400).send({ error: 'invalid-bbox' });
     const lim = limitSchema.safeParse(q['limit'] ?? DEFAULT_LIMIT);
     if (!lim.success) return reply.code(400).send({ error: 'invalid-limit' });
     let cursor: string | null = null;
@@ -125,7 +129,7 @@ export function buildApp(deps: AppDeps = {}): FastifyInstance {
     try {
       const meta = await deps.getSnapshotMeta();
       if (!meta) return reply.code(503).send({ error: 'no-snapshot' });
-      const page = await deps.getRepeaters(meta.id, { bbox, limit: lim.data, cursor });
+      const page = await deps.getRepeaters(meta.id, { bbox: parsed.bbox, limit: lim.data, cursor });
       return { snapshotId: meta.id, items: page.items, nextCursor: page.nextCursor };
     } catch {
       return reply.code(503).send({ error: 'planner-db-unreachable' });
@@ -138,8 +142,8 @@ export function buildApp(deps: AppDeps = {}): FastifyInstance {
       return reply.code(503).send({ error: 'store-not-configured' });
     }
     const q = req.query as Record<string, unknown>;
-    const bbox = parseBbox(q['bbox']);
-    if (!bbox) return reply.code(400).send({ error: 'invalid-bbox' });
+    const parsed = parseBbox(q['bbox']);
+    if (!parsed.ok) return reply.code(400).send({ error: 'invalid-bbox' });
     const lim = limitSchema.safeParse(q['limit'] ?? DEFAULT_LIMIT);
     if (!lim.success) return reply.code(400).send({ error: 'invalid-limit' });
     let cursor: { sourceId: string; targetId: string } | null = null;
@@ -152,7 +156,7 @@ export function buildApp(deps: AppDeps = {}): FastifyInstance {
     try {
       const meta = await deps.getSnapshotMeta();
       if (!meta) return reply.code(503).send({ error: 'no-snapshot' });
-      const page = await deps.getObservedLinks(meta.id, { bbox, limit: lim.data, cursor });
+      const page = await deps.getObservedLinks(meta.id, { bbox: parsed.bbox, limit: lim.data, cursor });
       return { snapshotId: meta.id, items: page.items, nextCursor: page.nextCursor };
     } catch {
       return reply.code(503).send({ error: 'planner-db-unreachable' });

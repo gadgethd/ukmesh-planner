@@ -46,3 +46,19 @@ read-only transactions, timeouts, connlimit ≤ 2), used solely by the ingester.
 feature branches per stage; CI (tests + build) gates every merge; no direct
 deployment of unvalidated builds; separate planner stack so rollback can never
 touch live UK Mesh. — 2026-10-13.
+
+**D-008 — Dataset scope = full published snapshot.** The planner serves and
+displays the complete published repeater set (currently 8,798) with no implicit
+spatial filter; the dataset legitimately contains continental repeaters
+(NL/BE/FR/DE) and a handful of stray/junk coordinates, matching the live map's
+data. `bbox` remains an explicit query parameter for bounded reads. — 2026-10-13.
+
+**D-009 — Terrain sampling semantics.** Terrarium z12, bilinear; sea/river
+bathymetry values used as-is; NODATA ⇒ `unknown-terrain` (fail closed); local
+tile coordinates clamped to [0,255] (≤ 1 px error) so tile-edge samples are
+never misreported as missing; transient tile failures retried once, never
+cached as missing. Full text: docs/rf/model-assumptions.md. — 2026-10-13.
+
+**D-010 — Overlay install is event-order independent.** Sources/layers install
+idempotently on `styledata`, `load` and `idle` rather than `load` alone, so a
+style event reordering can never leave a rendered-but-empty map. — 2026-10-13.

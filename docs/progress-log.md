@@ -137,3 +137,36 @@ no-agents restriction, continuous execution, measure-first resources).
   with real data (Newcastle bbox: real repeaters, directional link evidence
   with force_viable, working pagination, 400 on invalid bbox, live
   `datasetVersion`).
+
+- **Stage 3 step 2 — Simple-journey map UX (2026-10-13 ~01:00–02:40 UTC).**
+  MapLibre map (OpenFreeMap basemap, Terrarium terrain + hillshade from the
+  read-only tile mount), clustered repeater pins coloured by freshness,
+  click/drag placement of a proposed site, browser-worker RF assessment
+  (rf-core + terrain provider over `/terrain-tiles/`), result sheet with
+  counts, top links, explanations, antenna-height control, undo/clear,
+  light/dark themes. Web unit tests green (tilemath clamp regression included).
+  Verified in a real browser against staging through a tunnel: 8,798 repeaters
+  load; a Newcastle site assesses 300 of 631 in-range candidates in ~1–2 s
+  warm; 42 likely / 258 blocked at 2 m, 86/214 at 30 m (physically sensible);
+  undo restores the previous site exactly; theme switch re-installs overlays.
+  Evidence: `evidence/stage3/` screenshots (light + dark, green solid / red
+  dashed links).
+
+- **Four real bugs found by that verification (all fixed):**
+  1. MapLibre's tile worker was broken in the Vite build ("Worker failed to
+     load") — the basemap never rendered. Fixed by importing
+     `maplibre-gl-worker.mjs?url` and `setWorkerUrl()`; nginx now serves
+     `.mjs` as `text/javascript` (stock mime.types only maps `.js`).
+  2. Overlay install depended on the `load` event, which did not fire in
+     testing even with a healthy style. Overlays are now installed
+     idempotently on `styledata`/`load`/`idle` (the theme-switch path already
+     used `styledata`).
+  3. Terrain edge bug: profile samples in the outer 1-px band of a tile's
+     right/bottom edge were rejected by `bilinearSample` (pixel-centre
+     contract) and reported as "missing terrain" — 246/300 paths affected on
+     the first E2E. Local tile coordinates are now clamped (≤ 1 px error) —
+     see docs/rf/model-assumptions.md.
+  4. API default bbox silently dropped ~30 % of the dataset (continental
+     repeaters are legitimately present in the published snapshot). `bbox` is
+     now opt-in; the full snapshot is served by default. Tile fetch failures
+     are also retried once instead of being cached as permanently missing.

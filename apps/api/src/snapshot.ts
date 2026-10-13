@@ -19,14 +19,15 @@ export interface Page<T> {
 }
 
 export interface RepeaterQuery {
-  /** [west, south, east, north] */
-  bbox: [number, number, number, number];
+  /** [west, south, east, north]; null = no spatial filter (full snapshot). */
+  bbox: [number, number, number, number] | null;
   limit: number;
   cursor: string | null;
 }
 
 export interface LinkQuery {
-  bbox: [number, number, number, number];
+  /** [west, south, east, north]; null = no spatial filter (full snapshot). */
+  bbox: [number, number, number, number] | null;
   limit: number;
   cursor: { sourceId: string; targetId: string } | null;
 }
@@ -71,8 +72,8 @@ export function makePlannerStore(dbUrl: string): PlannerStore {
            hardware_model, firmware_version, iata, advert_count, identity_member_count
       FROM source_repeaters
      WHERE snapshot_id = $1
-       AND lat BETWEEN $2 AND $3
-       AND lon BETWEEN $4 AND $5
+       AND ($2::float8 IS NULL OR lat BETWEEN $2 AND $3)
+       AND ($4::float8 IS NULL OR lon BETWEEN $4 AND $5)
        AND ($6 = '' OR canonical_id > $6)
      ORDER BY canonical_id
      LIMIT $7`;
@@ -88,8 +89,8 @@ export function makePlannerStore(dbUrl: string): PlannerStore {
          SELECT 1 FROM source_repeaters r
           WHERE r.snapshot_id = l.snapshot_id
             AND r.canonical_id IN (l.source_id, l.target_id)
-            AND r.lat BETWEEN $4 AND $5
-            AND r.lon BETWEEN $6 AND $7
+            AND ($4::float8 IS NULL OR r.lat BETWEEN $4 AND $5)
+            AND ($6::float8 IS NULL OR r.lon BETWEEN $6 AND $7)
        )
      ORDER BY l.source_id, l.target_id
      LIMIT $8`;
@@ -181,7 +182,7 @@ export function makePlannerStore(dbUrl: string): PlannerStore {
 
     async getRepeaters(snapshotIdArg: string, query: RepeaterQuery): Promise<Page<PlannerRepeater>> {
       const c = await getClient();
-      const [w, s, e, n] = query.bbox;
+      const [w, s, e, n] = query.bbox ?? [null, null, null, null];
       const res = await c.query(REPEATERS_PAGE_SQL, [
         snapshotIdArg, s, n, w, e, query.cursor ?? '', query.limit + 1,
       ]);
@@ -196,7 +197,7 @@ export function makePlannerStore(dbUrl: string): PlannerStore {
 
     async getObservedLinks(snapshotIdArg: string, query: LinkQuery): Promise<Page<PlannerObservedLink>> {
       const c = await getClient();
-      const [w, s, e, n] = query.bbox;
+      const [w, s, e, n] = query.bbox ?? [null, null, null, null];
       const curA = query.cursor?.sourceId ?? '';
       const curB = query.cursor?.targetId ?? '';
       const res = await c.query(LINKS_PAGE_SQL, [

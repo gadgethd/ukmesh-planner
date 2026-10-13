@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lonLatToGlobalPx, tileOfGlobalPx, tilesForPoints, DEM_ZOOM, TILE_SIZE } from './tilemath.js';
+import { localTileCoords, lonLatToGlobalPx, tileOfGlobalPx, tilesForPoints, DEM_ZOOM, TILE_SIZE } from './tilemath.js';
 import { freshnessBucket } from './freshness.js';
 
 describe('tilemath', () => {
@@ -29,6 +29,20 @@ describe('tilemath', () => {
     const tiles = tilesForPoints(pts);
     expect(tiles.length).toBeGreaterThanOrEqual(1);
     expect(tiles.length).toBeLessThanOrEqual(2);
+  });
+});
+
+describe('localTileCoords', () => {
+  it('clamps the outer pixel band to the addressable range', () => {
+    // Sample exactly on the tile's right/bottom boundary pixel
+    const c = localTileCoords(2019 * TILE_SIZE + 255.9, 1295 * TILE_SIZE + 255.99, { x: 2019, y: 1295 });
+    expect(c.lx).toBe(TILE_SIZE - 1);
+    expect(c.ly).toBe(TILE_SIZE - 1);
+    const mid = localTileCoords(2019 * TILE_SIZE + 12.5, 1295 * TILE_SIZE + 40.25, { x: 2019, y: 1295 });
+    expect(mid.lx).toBeCloseTo(12.5, 6);
+    expect(mid.ly).toBeCloseTo(40.25, 6);
+    const low = localTileCoords(2019 * TILE_SIZE - 0.0001, 1295 * TILE_SIZE, { x: 2019, y: 1295 });
+    expect(low.lx).toBe(0);
   });
 });
 

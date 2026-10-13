@@ -99,17 +99,17 @@ describe('planner api (stage 1)', () => {
 });
 
 describe('parseBbox', () => {
-  it('defaults, parses and rejects', () => {
-    expect(parseBbox(undefined)).toEqual([-11, 49.5, 3, 61]);
-    expect(parseBbox('-2,54,0,55')).toEqual([-2, 54, 0, 55]);
-    expect(parseBbox('1,2,3')).toBeNull();
-    expect(parseBbox('0,55,-2,54')).toBeNull();
-    expect(parseBbox('a,b,c,d')).toBeNull();
+  it('absent => no filter; parses valid; rejects malformed', () => {
+    expect(parseBbox(undefined)).toEqual({ ok: true, bbox: null });
+    expect(parseBbox('-2,54,0,55')).toEqual({ ok: true, bbox: [-2, 54, 0, 55] });
+    expect(parseBbox('1,2,3')).toEqual({ ok: false });
+    expect(parseBbox('0,55,-2,54')).toEqual({ ok: false });
+    expect(parseBbox('a,b,c,d')).toEqual({ ok: false });
   });
 });
 
 describe('data endpoints', () => {
-  it('repeaters: default bbox + items + cursor', async () => {
+  it('repeaters: absent bbox => full snapshot (no spatial filter)', async () => {
     const { deps, calls } = makeDeps();
     const app = buildApp(deps);
     const res = await app.inject({ method: 'GET', url: '/api/v1/repeaters' });
@@ -118,7 +118,7 @@ describe('data endpoints', () => {
     expect(body.snapshotId).toBe('snap-test-1');
     expect(body.items).toHaveLength(2);
     expect(body.nextCursor).toBeNull();
-    expect(calls.repeaterQueries[0]!.bbox).toEqual([-11, 49.5, 3, 61]);
+    expect(calls.repeaterQueries[0]!.bbox).toBeNull();
     await app.close();
   });
 

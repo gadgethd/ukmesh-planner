@@ -18,7 +18,7 @@ import {
 } from '@ukmesh-planner/rf-core';
 import {
   DEM_ZOOM,
-  TILE_SIZE,
+  localTileCoords,
   lonLatToGlobalPx,
   tileOfGlobalPx,
   tilesForPoints,
@@ -30,8 +30,10 @@ const MAX_CACHED_TILES = 160;
 
 export class TerrariumTileProvider implements TerrainProvider {
   readonly revision = TERRAIN_REVISION;
-  private cache = new Map<string, ElevationRaster | null>();
+  private cache = new Map<string, ElevationRaster>();
   private inflight = new Map<string, Promise<ElevationRaster | null>>();
+  /** Transient-failure bookkeeping: a tile that failed twice is treated as absent. */
+  private failed = new Map<string, number>();
 
   constructor(private readonly baseUrl = '/terrain-tiles') {}
 
@@ -41,7 +43,9 @@ export class TerrariumTileProvider implements TerrainProvider {
 
   private async loadTile(t: TileCoord): Promise<ElevationRaster | null> {
     const key = this.key(t);
-    if (this.cache.has(key)) return this.cache.get(key) ?? null;
+    const cached = this.cache.get(key);
+    if (cached) return cached;
+    if ((this.failed.get(key) ?? 0) >= 2) return null;
     const existing = this.inflight.get(key);
     if (existing) return existing;
 
@@ -71,6 +75,13 @@ export class TerrariumTileProvider implements TerrainProvider {
 
     this.inflight.set(key, promise);
     const raster = await promise;
+    if (raster === null) {
+      // Never cache a failure permanently: transient network errors must not
+      // poison the tile for the whole session. Retry once on next request.
+      this.failed.set(key, (this.failed.get(key) ?? 0) + 1);
+      return null;
+    }
+    this.failed.delete(key);
     if (this.cache.size >= MAX_CACHED_TILES) {
       const first = this.cache.keys().next().value;
       if (first !== undefined) this.cache.delete(first);
@@ -84,7 +95,8 @@ export class TerrariumTileProvider implements TerrainProvider {
     const t = tileOfGlobalPx(px, py);
     const raster = this.cache.get(this.key({ z: DEM_ZOOM, ...t }));
     if (!raster) return null;
-    return bilinearSample(raster, px - t.x * TILE_SIZE, py - t.y * TILE_SIZE);
+    const { lx, ly } = localTileCoords(px, py, t);
+    return bilinearSample(raster, lx, ly);
   }
 
   async warmPoint(p: LatLon): Promise<void> {

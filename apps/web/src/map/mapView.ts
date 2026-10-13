@@ -13,8 +13,15 @@ import {
   Marker,
   NavigationControl,
   ScaleControl,
+  setWorkerUrl,
 } from 'maplibre-gl';
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
+
+// MapLibre parses tiles in its own worker. Left to itself, the bundler keeps a
+// URL that does not exist in the built output ("Worker failed to load" → the
+// basemap never renders). Point it at the Vite-emitted asset instead.
+setWorkerUrl(maplibreWorkerUrl);
 import type { FeatureCollection, LineString, Point } from 'geojson';
 import type { PlannerRepeater } from '@ukmesh-planner/contracts';
 import { freshnessBucket, type FreshnessBucket } from '../lib/freshness.js';
@@ -79,10 +86,21 @@ export class MapView {
       }),
     );
 
-    this.map.on('load', () => {
-      this.installTerrain();
-      this.installOverlays();
-    });
+    // Install overlays on `styledata`, not only on `load`: both events can
+    // fire in different orders across browsers/engines, and `styledata` is
+    // the point at which addSource/addLayer are valid. `install()` is
+    // idempotent, so repeated events are harmless.
+    const install = (): void => {
+      try {
+        this.installTerrain();
+        this.installOverlays();
+      } catch {
+        // Style mid-update; a later styledata/load event retries.
+      }
+    };
+    this.map.on('load', install);
+    this.map.on('styledata', install);
+    this.map.on('idle', install);
     this.map.on('click', (e) => this.cb.onMapClick({ lng: e.lngLat.lng, lat: e.lngLat.lat }));
   }
 
@@ -218,8 +236,10 @@ export class MapView {
             'blocked', LINK_COLORS.blocked,
             LINK_COLORS['unknown-terrain'],
           ],
-          'line-width': ['match', ['get', 'classification'], 'blocked', 2, 1.8],
-          'line-opacity': 0.95,
+          // Blocked paths are context, not the headline: thinner + fainter so
+          // dense sites read as a pattern instead of a hairball (build brief §5).
+          'line-width': ['match', ['get', 'classification'], 'blocked', 1.4, 1.8],
+          'line-opacity': ['match', ['get', 'classification'], 'blocked', 0.55, 0.85],
           'line-dasharray': [2.5, 2],
         },
         layout: {
@@ -288,8 +308,12 @@ export class MapView {
     this.overlaysReady = false;
     this.map.setStyle(theme === 'light' ? STYLE_LIGHT : STYLE_DARK);
     this.map.once('styledata', () => {
-      this.installTerrain();
-      this.installOverlays();
+      try {
+        this.installTerrain();
+        this.installOverlays();
+      } catch {
+        // retried by the persistent styledata handler
+      }
     });
   }
 
