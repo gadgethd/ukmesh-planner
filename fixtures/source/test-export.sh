@@ -25,10 +25,22 @@ docker run -d --rm --name "$C" --tmpfs /var/lib/postgresql/data \
   -e POSTGRES_PASSWORD=test -e POSTGRES_USER=meshcore -e POSTGRES_DB=meshcore \
   postgres:16-alpine >/dev/null
 
-for _ in $(seq 1 30); do
-  docker exec "$C" pg_isready -U meshcore -d meshcore >/dev/null 2>&1 && break
+# Wait for the FINAL server AND the target database: pg_isready alone can
+# succeed against the entrypoint's temporary init server (no user DB yet),
+# which made CI fail with 'database "meshcore" does not exist'.
+ready=""
+for _ in $(seq 1 60); do
+  if docker exec "$C" psql -U meshcore -d meshcore -qtA -c "SELECT 1" >/dev/null 2>&1; then
+    ready=1
+    break
+  fi
   sleep 1
 done
+if [ -z "$ready" ]; then
+  echo "FATAL: scratch postgres never became ready"
+  docker logs "$C" 2>&1 | tail -20
+  exit 1
+fi
 
 ADMIN_Q()  { docker exec -i "$C" psql -U meshcore -d meshcore -qtA "$@"; }
 READER_Q() { docker exec -i "$C" psql -U ukmesh_planner_reader -d meshcore -qtA "$@"; }
