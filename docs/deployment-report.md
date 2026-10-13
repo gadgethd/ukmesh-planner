@@ -117,3 +117,61 @@ identical deployment. The compose `PUBLIC_ORIGIN` already defaults to
   Chromium-family only (WebKit/Gecko not available in this environment — the
   WASM tier and precision-safe shader were built specifically to make
   results browser-independent).
+
+## What was built
+
+**Simple journey** (default): click the map → proposed site appears → assessment
+runs in a worker → predicted links (likely/marginal/blocked) drawn with a
+results sheet (counts, per-link factors, height slider, undo, full-snapshot
+repeaters with staleness). No account, no multi-step flow.
+
+**Advanced mode** (state-preserving toggle): terrain profile + Fresnel
+cross-section per link, RF editor (UK presets, advisory EIRP), observed vs
+predicted link layers (reciprocal solid / one-way dashed), network topology
+(weak components, articulation/bridges) + site-removal scenarios, bounded
+candidate-site search with explainable ranking (reach/resilience/balanced),
+coverage heatmap (tiered compute).
+
+**Compute tiers**: WebGPU kernel (precision-safe trig, parity-verified vs CPU:
+mean 0.241 dB, 15/16,384 boundary flips, all horizon-grazing knife-edge
+explained) → AssemblyScript WASM core (bit-exact vs CPU, 0 mismatches) →
+CPU reference. Tier auto-selection: hardware WebGPU → WASM on software
+adapters/no-GPU → CPU oracle. Full parity evidence: `docs/rf/parity-fixtures.md`,
+`docs/performance/benchmarks.md`.
+
+**Data**: planner-owned Postgres fed by a read-only source reader over
+approved sanitized views (`source_snapshots` / `source_repeaters` /
+`source_observed_links`), atomic publish + privacy fence re-check, full
+snapshot served (8,799 positioned repeaters; no silent truncation).
+**Shares**: opt-in, unguessable UUID, 30-day TTL default (max 90), revoke
+token held locally by the creator, 410 on revoked/expired, 64 KB payload cap.
+
+## Limitations / deferred
+
+- **`planner.ukmesh.com` DNS publish** — blocked (above); staged URL serves
+  the identical build.
+- Planner-specific alerting is not wired into fleet monitoring yet; the
+  hooks exist (web `/healthz`, api `/healthz` + `/readyz`) — recommended
+  follow-up: an uptime-kuma monitor on the public `/healthz`.
+- Advanced items beyond the stage exit gate (bridge-route planner, height
+  optimiser, feasibility/power checklists, field surveys, scenario history,
+  viewshed-vs-existing delta) are deferred by design — tracked in
+  `docs/progress-log.md`.
+- Cross-browser verification is Chromium-family only in this environment.
+- noVNC-less headless captures can show partial frame flushes (environment
+  artifact, not app behaviour).
+
+## Execution attestation (honest record)
+
+The project brief's original no-delegation clause (D-001) was **amended by
+Ben on 2026-10-13** ("you can use 6.1 sol xhigh for anything you need help
+with … you can use it explicitly now"); the amendment is recorded in
+`docs/decisions/DECISIONS.md`, the plan §16, and `STATE.md`. Under the amended
+policy, three bounded, spec'd modules were delegated to subagents
+(topology module; candidate screening/ranking module; shares API + migration),
+each with explicit file lists and verification commands; their outputs were
+independently re-verified in-session (typecheck, tests, browser E2E) and
+patched where they diverged (newly-isolated semantics). Everything else —
+architecture, RF engine, compute tiers, UI, deployment, verification — was
+implemented and verified in the owning session. **No MissionDeck tasks were
+used; no sol@xhigh escalations were needed.**
