@@ -49,6 +49,8 @@ export const plannerObservedLinkSchema = z.object({
   lastObserved: isoDateTime,
   pathLossDb: z.number().nullable(),
   itmViable: z.boolean().nullable(),
+  /** Source semantics: viable = itm_viable OR force_viable (kept separate). */
+  forceViable: z.boolean().nullable(),
   evidence: z.literal('observed'),
 });
 export type PlannerObservedLink = z.infer<typeof plannerObservedLinkSchema>;
@@ -244,6 +246,21 @@ export const apiErrorSchema = z.object({
   detail: z.string().optional(),
 });
 export type ApiError = z.infer<typeof apiErrorSchema>;
+
+/** Paginated API responses (planner-origin). */
+export const repeatersPageSchema = z.object({
+  snapshotId: z.string(),
+  items: z.array(plannerRepeaterSchema),
+  nextCursor: z.string().nullable(),
+});
+export type RepeatersPage = z.infer<typeof repeatersPageSchema>;
+
+export const observedLinksPageSchema = z.object({
+  snapshotId: z.string(),
+  items: z.array(plannerObservedLinkSchema),
+  nextCursor: z.string().nullable(),
+});
+export type ObservedLinksPage = z.infer<typeof observedLinksPageSchema>;
 
 // ---------------------------------------------------------------------------
 // Versions

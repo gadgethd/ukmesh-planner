@@ -10,6 +10,7 @@
     "start": "tsx src/server.ts"
   },
   "dependencies": {
+    "@ukmesh-planner/contracts": "*",
     "fastify": "^5.12.5",
     "zod": "^4.6.7"
   }

@@ -1,25 +1,60 @@
 /**
  * Planner API — small, rate-limited, same-origin service.
  *
- * Stage 1 scope: health/readiness + config endpoints and the response shapes
- * the frontend will rely on. Snapshot-backed endpoints arrive in Stage 2
- * (their data flows from the planner datastore, never from the source DB).
+ * Serves planner-owned data only (published snapshots + bounded derived
+ * reads); it is not an SQL proxy to the source DB (build brief §8.2).
  */
 import Fastify, { type FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import {
   DEFAULT_BOUNDS,
   RF_MODEL_VERSION,
   SOURCE_CONTRACT_VERSION,
+  type PlannerObservedLink,
+  type PlannerRepeater,
   type SnapshotMeta,
 } from '@ukmesh-planner/contracts';
+import type { LinkQuery, Page, RepeaterQuery } from './snapshot.js';
+import { makeRateLimiter } from './rateLimit.js';
 
 export interface AppDeps {
-  /** Returns the currently published snapshot metadata ("ready" signal). */
   getSnapshotMeta?: () => Promise<SnapshotMeta | null>;
+  getRepeaters?: (snapshotId: string, query: RepeaterQuery) => Promise<Page<PlannerRepeater>>;
+  getObservedLinks?: (snapshotId: string, query: LinkQuery) => Promise<Page<PlannerObservedLink>>;
+  rateLimit?: { windowMs: number; max: number };
+}
+
+const DEFAULT_LIMIT = 10_000;
+const MAX_LIMIT = 20_000;
+
+const limitSchema = z.coerce.number().int().min(1).max(MAX_LIMIT);
+const cursorIdSchema = z.string().regex(/^[0-9A-F]{64}$/);
+const linkCursorSchema = z.string().regex(/^[0-9A-F]{64}:[0-9A-F]{64}$/);
+
+type Bbox = [number, number, number, number];
+
+/** Parse `bbox=w,s,e,n`; absent => default operational bounds. */
+export function parseBbox(raw: unknown): Bbox | null {
+  if (raw === undefined) return DEFAULT_BOUNDS;
+  if (typeof raw !== 'string') return null;
+  const parts = raw.split(',').map((p) => Number(p));
+  if (parts.length !== 4 || parts.some((p) => !Number.isFinite(p))) return null;
+  const [w, s, e, n] = parts as Bbox;
+  if (s < -90 || n > 90 || w < -180 || e > 180) return null;
+  if (w >= e || s >= n) return null;
+  return [w, s, e, n];
 }
 
 export function buildApp(deps: AppDeps = {}): FastifyInstance {
   const app = Fastify({ logger: false });
+  const limiter = makeRateLimiter(deps.rateLimit ?? { windowMs: 60_000, max: 240 });
+
+  // Rate-limit all data routes (health probes exempt).
+  app.addHook('onRequest', async (req, reply) => {
+    if (req.url.startsWith('/api/v1/') && !limiter.allow(req.ip)) {
+      await reply.code(429).send({ error: 'rate-limited' });
+    }
+  });
 
   // Liveness — must not touch any database.
   app.get('/healthz', async () => ({ ok: true }));
@@ -57,6 +92,71 @@ export function buildApp(deps: AppDeps = {}): FastifyInstance {
       computeBackends: ['wasm', 'webgpu'],
       snapshot,
     };
+  });
+
+  // Published snapshot metadata.
+  app.get('/api/v1/snapshot/meta', async (_req, reply) => {
+    if (!deps.getSnapshotMeta) return reply.code(503).send({ error: 'store-not-configured' });
+    try {
+      const snapshot = await deps.getSnapshotMeta();
+      if (!snapshot) return reply.code(503).send({ error: 'no-snapshot' });
+      return { snapshot };
+    } catch {
+      return reply.code(503).send({ error: 'planner-db-unreachable' });
+    }
+  });
+
+  // Paginated repeaters (bbox + keyset cursor on canonical_id).
+  app.get('/api/v1/repeaters', async (req, reply) => {
+    if (!deps.getRepeaters || !deps.getSnapshotMeta) {
+      return reply.code(503).send({ error: 'store-not-configured' });
+    }
+    const q = req.query as Record<string, unknown>;
+    const bbox = parseBbox(q['bbox']);
+    if (!bbox) return reply.code(400).send({ error: 'invalid-bbox' });
+    const lim = limitSchema.safeParse(q['limit'] ?? DEFAULT_LIMIT);
+    if (!lim.success) return reply.code(400).send({ error: 'invalid-limit' });
+    let cursor: string | null = null;
+    if (q['cursor'] !== undefined) {
+      const c = cursorIdSchema.safeParse(q['cursor']);
+      if (!c.success) return reply.code(400).send({ error: 'invalid-cursor' });
+      cursor = c.data;
+    }
+    try {
+      const meta = await deps.getSnapshotMeta();
+      if (!meta) return reply.code(503).send({ error: 'no-snapshot' });
+      const page = await deps.getRepeaters(meta.id, { bbox, limit: lim.data, cursor });
+      return { snapshotId: meta.id, items: page.items, nextCursor: page.nextCursor };
+    } catch {
+      return reply.code(503).send({ error: 'planner-db-unreachable' });
+    }
+  });
+
+  // Paginated observed links (bbox touches either endpoint + keyset cursor).
+  app.get('/api/v1/observed-links', async (req, reply) => {
+    if (!deps.getObservedLinks || !deps.getSnapshotMeta) {
+      return reply.code(503).send({ error: 'store-not-configured' });
+    }
+    const q = req.query as Record<string, unknown>;
+    const bbox = parseBbox(q['bbox']);
+    if (!bbox) return reply.code(400).send({ error: 'invalid-bbox' });
+    const lim = limitSchema.safeParse(q['limit'] ?? DEFAULT_LIMIT);
+    if (!lim.success) return reply.code(400).send({ error: 'invalid-limit' });
+    let cursor: { sourceId: string; targetId: string } | null = null;
+    if (q['cursor'] !== undefined) {
+      const c = linkCursorSchema.safeParse(q['cursor']);
+      if (!c.success) return reply.code(400).send({ error: 'invalid-cursor' });
+      const [sourceId, targetId] = c.data.split(':') as [string, string];
+      cursor = { sourceId, targetId };
+    }
+    try {
+      const meta = await deps.getSnapshotMeta();
+      if (!meta) return reply.code(503).send({ error: 'no-snapshot' });
+      const page = await deps.getObservedLinks(meta.id, { bbox, limit: lim.data, cursor });
+      return { snapshotId: meta.id, items: page.items, nextCursor: page.nextCursor };
+    } catch {
+      return reply.code(503).send({ error: 'planner-db-unreachable' });
+    }
   });
 
   return app;
