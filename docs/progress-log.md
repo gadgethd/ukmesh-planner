@@ -170,3 +170,38 @@ no-agents restriction, continuous execution, measure-first resources).
      repeaters are legitimately present in the published snapshot). `bbox` is
      now opt-in; the full snapshot is served by default. Tile fetch failures
      are also retried once instead of being cached as permanently missing.
+
+- **Stage 3 exit gate — SIMPLE-01…05 verified on desktop and mobile
+  (2026-10-13 ~03:00–04:10 UTC).** All checks run against the staging stack
+  in a real Chromium via CDP:
+  - SIMPLE-01: load → click → site → lines + list, no account/modal. ✔
+  - SIMPLE-02: six rapid clicks at different spots → final state equals the
+    last click, no stale overwrite (debounce + job-id gating). ✔
+  - SIMPLE-03: antenna height 2 m → 30 m reran and updated (42→86 likely at
+    Newcastle); undo restored the previous site and its results exactly. ✔
+  - SIMPLE-04: site in Great Langdale (deep valley) → 251 blocked / 0 clear;
+    sheet states "Every path within range is blocked by terrain — try a
+    higher antenna height or a nearby high point." (never "no nodes"/green). ✔
+  - SIMPLE-05a: basemap unreachable (blocked OpenFreeMap) → app starts on a
+    built-in minimal style; terrain hillshade, repeaters, links and the full
+    assessment pipeline remain usable (screenshot evidence). ✔
+  - SIMPLE-05b: DEM tiles missing (404 via a fixture server serving the real
+    build) → all 300 paths report `unknown-terrain`, site elevation unknown,
+    sheet: "Terrain data is unavailable along the paths within range — no
+    honest prediction is possible here." No crash; map usable. ✔
+  - Mobile (390×844): one-line top bar, controls clear of the header,
+    bottom sheet with results and scroll, tap placement works. ✔
+- **Two robustness changes from this gate:** (1) the app now constructs the
+  map with a built-in minimal style and asynchronously *upgrades* to the
+  remote basemap (fetch with 7 s timeout) — MapLibre v6's `setStyle()` is a
+  silent no-op when the initial style fetch has failed, so a style-less map
+  must never exist; (2) mobile CSS (nowrap title, compact bar, dataset line
+  hidden < 520 px, map controls offset below the header).
+- **Verification-environment note (not an app defect):** this headless
+  Chromium throttles `requestAnimationFrame` until forced frames occur and
+  its software rasterizer occasionally flushes partial frames into captures
+  after heavy interaction (blank-map artifact in some post-interaction mobile
+  screenshots). The renderer is healthy throughout (queryRenderedFeatures
+  350–700+), canvas sizing is correct, and the same build renders fully when
+  quiet and at desktop size. Real-device mobile verification stays on the
+  Stage 7 checklist. Fixture: `evidence/stage3/missing-dem-server.py`.

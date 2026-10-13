@@ -46,7 +46,7 @@ html, body, #root { height: 100%; margin: 0; }
   width: 12px; height: 12px; border-radius: 50%;
   background: #e11d8f; box-shadow: 0 0 0 3px rgba(225, 29, 143, 0.22);
 }
-.topbar h1 { font-size: 15px; margin: 0; font-weight: 650; letter-spacing: 0.01em; }
+.topbar h1 { font-size: 15px; margin: 0; font-weight: 650; letter-spacing: 0.01em; white-space: nowrap; }
 .topbar-meta { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .topbar-meta .small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -162,6 +162,19 @@ button.ghost:hover { border-color: var(--accent); color: var(--accent); }
 .dot--unknown-terrain { background: #9333ea; }
 
 .showall { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 12.5px; }
+
+/* ---------- mobile refinements ---------- */
+@media (max-width: 520px) {
+  .topbar { padding: 6px 10px; gap: 8px; }
+  .topbar-meta .small { display: none; } /* dataset line: desktop only */
+  button.ghost { padding: 4px 8px; }
+}
+
+/* Keep map controls clear of the fixed top bar. */
+.maplibregl-ctrl-top-left,
+.maplibregl-ctrl-top-right {
+  top: 46px;
+}
 
 /* ---------- desktop: side panel ---------- */
 @media (min-width: 900px) {

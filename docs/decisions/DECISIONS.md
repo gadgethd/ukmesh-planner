@@ -62,3 +62,10 @@ cached as missing. Full text: docs/rf/model-assumptions.md. — 2026-10-13.
 **D-010 — Overlay install is event-order independent.** Sources/layers install
 idempotently on `styledata`, `load` and `idle` rather than `load` alone, so a
 style event reordering can never leave a rendered-but-empty map. — 2026-10-13.
+
+**D-011 — The app owns style loading (fallback-first, then upgrade).** The
+map is constructed with a built-in minimal style and asynchronously upgrades
+to the remote basemap (fetch, 7 s timeout, swap via `setStyle`). Rationale:
+MapLibre v6 silently no-ops `setStyle()` after a failed initial style fetch,
+so the map must never begin style-less; offline visitors still get terrain,
+repeaters, links and the full planner pipeline. — 2026-10-13.

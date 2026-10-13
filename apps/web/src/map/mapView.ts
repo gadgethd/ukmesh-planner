@@ -16,6 +16,7 @@ import {
   setWorkerUrl,
 } from 'maplibre-gl';
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
+import type { StyleSpecification } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 // MapLibre parses tiles in its own worker. Left to itself, the bundler keeps a
@@ -30,6 +31,29 @@ export const STYLE_LIGHT = 'https://tiles.openfreemap.org/styles/positron';
 export const STYLE_DARK = 'https://tiles.openfreemap.org/styles/dark';
 
 export type Theme = 'light' | 'dark';
+
+/**
+ * Minimal built-in styles used when the external basemap cannot load
+ * (offline, blocked, or slow): a plain background is enough for the planner
+ * core — terrain hillshade, repeaters and predicted links all come from our
+ * own origin — so the tool stays usable instead of showing a blank canvas.
+ */
+const FALLBACK_STYLES: Record<Theme, StyleSpecification> = {
+  light: {
+    version: 8,
+    sources: {},
+    layers: [
+      { id: 'background', type: 'background', paint: { 'background-color': '#e9e6df' } },
+    ],
+  },
+  dark: {
+    version: 8,
+    sources: {},
+    layers: [
+      { id: 'background', type: 'background', paint: { 'background-color': '#101722' } },
+    ],
+  },
+};
 
 export const REPEATER_COLORS = {
   fresh: '#15803d',
@@ -60,15 +84,22 @@ export class MapView {
   private pendingRepeaters: FeatureCollection<Point> | null = null;
   private pendingLinks: FeatureCollection<LineString> | null = null;
   private theme: Theme = 'light';
+  /** True while the built-in minimal style is displayed (no remote basemap). */
+  private styleIsFallback = true;
 
   constructor(
     container: HTMLElement,
     bounds: [number, number, number, number],
     private readonly cb: MapViewCallbacks,
   ) {
+    // Start from the built-in minimal style (a local object cannot fail) and
+    // upgrade to the remote basemap once it fetches. MapLibre does not
+    // recover via setStyle() when its initial style fetch fails (observed:
+    // setStyle silently no-ops afterwards), so the map must never begin in a
+    // style-less state — the planner core stays usable even fully offline.
     this.map = new MapLibreMap({
       container,
-      style: STYLE_LIGHT,
+      style: FALLBACK_STYLES.light,
       bounds,
       fitBoundsOptions: { padding: 32 },
       maxZoom: 15,
@@ -102,6 +133,33 @@ export class MapView {
     this.map.on('styledata', install);
     this.map.on('idle', install);
     this.map.on('click', (e) => this.cb.onMapClick({ lng: e.lngLat.lng, lat: e.lngLat.lat }));
+
+    void this.tryLoadRemoteStyle(this.theme);
+  }
+
+  /**
+   * Fetch the remote basemap style with a bounded timeout and swap to it.
+   * On any failure the built-in style simply stays in place.
+   */
+  private async tryLoadRemoteStyle(theme: Theme): Promise<void> {
+    try {
+      const res = await fetch(theme === 'light' ? STYLE_LIGHT : STYLE_DARK, {
+        signal: AbortSignal.timeout(7000),
+      });
+      if (!res.ok) throw new Error(`style http ${res.status}`);
+      const json = (await res.json()) as StyleSpecification;
+      this.styleIsFallback = false;
+      this.overlaysReady = false;
+      this.map.setStyle(json);
+    } catch {
+      if (!this.styleIsFallback) {
+        // A theme switch lost its remote style mid-session: swap to the
+        // built-in style for the requested theme so the map stays coherent.
+        this.styleIsFallback = true;
+        this.overlaysReady = false;
+        this.map.setStyle(FALLBACK_STYLES[theme]);
+      }
+    }
   }
 
   private installTerrain(): void {
@@ -305,16 +363,12 @@ export class MapView {
   setTheme(theme: Theme): void {
     if (theme === this.theme) return;
     this.theme = theme;
-    this.overlaysReady = false;
-    this.map.setStyle(theme === 'light' ? STYLE_LIGHT : STYLE_DARK);
-    this.map.once('styledata', () => {
-      try {
-        this.installTerrain();
-        this.installOverlays();
-      } catch {
-        // retried by the persistent styledata handler
-      }
-    });
+    if (this.styleIsFallback) {
+      this.overlaysReady = false;
+      this.map.setStyle(FALLBACK_STYLES[theme]);
+      return;
+    }
+    void this.tryLoadRemoteStyle(theme);
   }
 
   getState(): { center: [number, number]; zoom: number } {

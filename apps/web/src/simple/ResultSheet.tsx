@@ -86,18 +86,18 @@ export function ResultSheet(props: Props) {
 
   let explanation: string | null = null;
   if (assess.status === 'done') {
+    const likelyOrMarginal = (counts['likely'] ?? 0) + (counts['marginal'] ?? 0);
     if (assess.totalWithinRange === 0) {
       explanation = `No repeaters within the modelled range (${props.maxRangeKm} km).`;
-    } else if (drawn.length === 0) {
-      const blocked = counts['blocked'] ?? 0;
-      const unknown = counts['unknown-terrain'] ?? 0;
-      if (blocked > 0) {
-        explanation = 'Every path within range is blocked by terrain — try a higher antenna height or a nearby high point.';
-      } else if (unknown > 0) {
-        explanation = 'Terrain data is unavailable along the paths within range — no honest prediction is possible here.';
-      } else {
-        explanation = 'No compatible repeaters within modelled range.';
-      }
+    } else if (likelyOrMarginal === 0 && (counts['blocked'] ?? 0) > 0) {
+      // SIMPLE-04: terrain blockage must be stated as blockage, never as
+      // "no nodes" — this fires whenever no clear path exists, even though
+      // the blocked links themselves are still drawn.
+      explanation = 'Every path within range is blocked by terrain — try a higher antenna height or a nearby high point.';
+    } else if (likelyOrMarginal === 0 && (counts['unknown-terrain'] ?? 0) > 0) {
+      explanation = 'Terrain data is unavailable along the paths within range — no honest prediction is possible here.';
+    } else if (likelyOrMarginal === 0 && drawn.length === 0) {
+      explanation = 'No clear paths within modelled range.';
     }
   }
 
