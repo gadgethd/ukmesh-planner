@@ -118,3 +118,13 @@ no-agents restriction, continuous execution, measure-first resources).
   "Connection terminated" as an uncaught crash. Fixed with `return await` plus
   an explanatory comment; `main.ts` now also guards against uncaught
   rejections.
+
+- **Stage 2c — staging stack LIVE on the VPS (2026-10-13 00:34–00:35 UTC).**
+  `ukmesh-planner` compose project: db/api/web/ingest all healthy; web on
+  127.0.0.1:3400 (public routing later via tunnel). First **live snapshot
+  published**: `snap-20261013T003449Z-g810-7ba8` — 8,798 repeaters / 37,076
+  links @ privacy generation 810; fetch ~1.7s (repeaters 0.7s / links 1.0s
+  through the real ingest path), publish ~8.9s. API `/readyz` serves snapshot
+  metadata; UK Mesh untouched (site 200, containers healthy). Footprints:
+  ingest 66MB · api 77MB · web 13MB · db 91MB — well inside caps.
+- Log hygiene: `redactUrl` now strips userinfo entirely; unit-tested.

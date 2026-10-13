@@ -12,5 +12,6 @@ export function log(level: Level, msg: string, fields: Record<string, unknown> =
 
 /** Strip credentials from a connection URL for safe logging. */
 export function redactUrl(url: string): string {
-  return url.replace(/(\/\/[^@/]+)@/, '//***@');
+  // Remove any userinfo entirely — credentials never appear in logs at all.
+  return url.replace(/\/\/[^@/]*@/, '//');
 }
