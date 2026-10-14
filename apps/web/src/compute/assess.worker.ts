@@ -50,6 +50,14 @@ const DRAWN_PATH_MAX_POINTS = 200;
 /** Moving-average window (samples; 100 m spacing) smoothing the terrain base. */
 const DRAWN_SMOOTH_WINDOW = 6;
 /**
+ * Edge blend: the terrain lift fades in over the first/last 15% of the link
+ * (smoothstep, zero derivative at the ends) so the drawn line leaves the
+ * START point and arrives at the END point as one continuous smooth arc —
+ * without it the terrain lift appears as a hook right after the endpoint
+ * (Ben 2026-10-14: "the endpoint and start point need to calculate the arc").
+ */
+const DRAWN_EDGE_BLEND_T = 0.15;
+/**
  * Gentle visual bow on top of the terrain-following base: proportional to the
  * link (max 250 m). This is a visual device like the map's terrain
  * exaggeration — the arc exists so links read as airborne 3D objects; path
@@ -110,11 +118,20 @@ export function buildDrawnPath(
   }
 
   const lift = Math.min(DRAWN_ARC_MAX_M, DRAWN_ARC_FRACTION * dTotal);
+  const smoothstep = (x: number): number => {
+    const c = Math.min(1, Math.max(0, x));
+    return c * c * (3 - 2 * c);
+  };
+  const edgeWeight = (t: number): number =>
+    smoothstep(t / DRAWN_EDGE_BLEND_T) * smoothstep((1 - t) / DRAWN_EDGE_BLEND_T);
   const out: AssessedPathPoint[] = [];
   for (let k = 0; k < idxs.length; k += 1) {
     const i = idxs[k]!;
     const t = tAt(i);
-    let altM = smoothed[k]! + lift * sinLift(t);
+    // The terrain lift blends in from the endpoints (smoothstep) so the curve
+    // is one continuous arc from the start point to the end point.
+    const terrainLift = Math.max(0, smoothed[k]! - rayAt(t));
+    let altM = rayAt(t) + edgeWeight(t) * terrainLift + lift * sinLift(t);
     // Never underground.
     altM = Math.max(altM, profile.heights[i]! + TERRAIN_CLEAR_MIN_M);
     // Exact antenna heights at both ends.
