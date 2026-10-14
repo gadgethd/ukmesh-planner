@@ -246,7 +246,17 @@ export function App() {
         lon: x.r.lon,
       }));
       const total = deduped.length;
-      setAssess((prev) => ({ ...prev, status: 'running', totalWithinRange: total, evaluated: candidates.length }));
+      setAssess((prev) => ({
+        ...prev,
+        status: 'running',
+        results: [],
+        siteElevationM: null,
+        elapsedMs: null,
+        missingTerrain: 0,
+        error: null,
+        totalWithinRange: total,
+        evaluated: candidates.length,
+      }));
 
       const handle = client.startAssess(
         { lat: s.lat, lon: s.lon, antennaHeightAglM: s.antennaHeightAglM },
@@ -356,6 +366,11 @@ export function App() {
       siteRef.current = next;
       setSite(next);
       if (opts.moveMarker) viewRef.current?.setPlannedSite({ lng: next.lon, lat: next.lat });
+      // Stale links must not linger while the new assessment runs (Ben
+      // 2026-10-14): drop the previous results and drawn links the moment
+      // the site moves — the sheet shows the evaluating spinner instead.
+      setAssess(EMPTY_ASSESS);
+      viewRef.current?.setLinks3D([]);
       if (opts.debounced) scheduleAssess(next);
     },
     [scheduleAssess],
