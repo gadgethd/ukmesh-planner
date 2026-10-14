@@ -45,31 +45,30 @@ export interface AssessCandidate {
 const TERRAIN_CLEAR_MIN_M = 2;
 /** Ground clearance demanded mid-path (terrain-aware arcs). */
 const TERRAIN_CLEAR_MARGIN_M = 25;
-/** Cap on the uniform terrain lift added to the arc (m). */
-const TERRAIN_LIFT_MAX_M = 2500;
 /** Hard cap on drawn points per link (profiles are <= 200 by construction). */
 const DRAWN_PATH_MAX_POINTS = 200;
+/** Moving-average window (samples; 100 m spacing) smoothing the terrain base. */
+const DRAWN_SMOOTH_WINDOW = 6;
 /**
- * Gentle visual arc: mid-span lift, proportional to the link (max 750 m).
- * This is a visual device like the map's terrain exaggeration — the arc
- * exists so links read as airborne 3D objects; path loss numbers are
- * unaffected. Settled with Ben 2026-10-14 (6x and 1.6x multipliers read as
- * "way too high"; keep it gentle).
+ * Gentle visual bow on top of the terrain-following base: proportional to the
+ * link (max 250 m). This is a visual device like the map's terrain
+ * exaggeration — the arc exists so links read as airborne 3D objects; path
+ * loss numbers are unaffected. Settled with Ben 2026-10-14: the line must
+ * rise over high ground toward high nodes and dip toward low ones, so the
+ * terrain base dominates and the bow is small.
  */
-const DRAWN_ARC_FRACTION = 0.06;
-const DRAWN_ARC_MAX_M = 750;
+const DRAWN_ARC_FRACTION = 0.02;
+const DRAWN_ARC_MAX_M = 250;
 
 /**
  * Build the drawn 3D path for a link (Ben's spec, 2026-10-14):
  *  - starts at the site antenna and ENDS AT THE TARGET REPEATER'S HEIGHT
- *    (both endpoints exact: ground + antenna height, zero arc);
- *  - a gentle mid-span arc (proportional lift);
- *  - terrain-aware: the arc is raised as a whole (uniform lift, solved
- *    directly from the sampled profile) until it clears every crest by a
- *    tapered margin (2 m at the endpoints -> 25 m mid-path), so the line
- *    floats smoothly over high ground instead of kinking up over hills;
- *  - lightly smoothed (interior only) so the profile sampling cannot render
- *    as facets; endpoints stay exact after smoothing.
+ *    (both endpoints exact: ground + antenna height);
+ *  - terrain/node aware: the base line clears the terrain by a tapered
+ *    margin (2 m at the ends -> 25 m mid-path) and is smoothed, so it rises
+ *    over high ground and toward high nodes, and dips toward low ones;
+ *  - a small gentle bow is added on top for the airborne look;
+ *  - never underground (final floor at terrain + 2 m).
  */
 export function buildDrawnPath(
   a: { lat: number; lon: number },
@@ -86,50 +85,41 @@ export function buildDrawnPath(
   for (let i = 0; i < n; i += step) idxs.push(i);
   if ((n - 1) % step !== 0) idxs.push(n - 1);
 
+  const tAt = (i: number): number => profile.dists[i]! / dTotal;
   const sinLift = (t: number): number => Math.sin(Math.PI * t);
   const marginAt = (t: number): number =>
     TERRAIN_CLEAR_MIN_M + (TERRAIN_CLEAR_MARGIN_M - TERRAIN_CLEAR_MIN_M) * sinLift(t);
-  const lift = Math.min(DRAWN_ARC_MAX_M, DRAWN_ARC_FRACTION * dTotal);
-
-  const tAt = (i: number): number => profile.dists[i]! / dTotal;
   // Straight sight ray: exact antenna altitudes at both ends.
   const rayAt = (t: number): number => hTxM + (hRxM - hTxM) * t;
 
-  // Terrain awareness: the smallest uniform lift that makes the arc clear
-  // every interior sample by the tapered margin (solved directly).
-  let extra = 0;
-  for (let k = 1; k < idxs.length - 1; k += 1) {
-    const i = idxs[k]!;
+  // Terrain-following base: the sight ray, held clear of the terrain by the
+  // tapered margin (over high ground the ground itself carries the line up).
+  const base = idxs.map((i) => {
     const t = tAt(i);
-    const s = sinLift(t);
-    if (s < 1e-3) continue;
-    const need = (profile.heights[i]! + marginAt(t) - rayAt(t)) / s - lift;
-    if (need > extra) extra = need;
-  }
-  extra = Math.min(extra, TERRAIN_LIFT_MAX_M);
+    return Math.max(rayAt(t), profile.heights[i]! + marginAt(t));
+  });
 
-  const alts = idxs.map((i) => rayAt(tAt(i)) + (lift + extra) * sinLift(tAt(i)));
-
-  // Light smoothing, interior only; endpoints stay exact.
-  const SMOOTH_WINDOW = 2;
-  const smoothed = alts.slice();
-  for (let k = 1; k < idxs.length - 1; k += 1) {
+  // Moving-average smoothing so the sampled profile cannot render as facets.
+  const smoothed = base.slice();
+  for (let k = 0; k < idxs.length; k += 1) {
+    const lo = Math.max(0, k - DRAWN_SMOOTH_WINDOW);
+    const hi = Math.min(idxs.length - 1, k + DRAWN_SMOOTH_WINDOW);
     let sum = 0;
-    let cnt = 0;
-    for (let w = Math.max(0, k - SMOOTH_WINDOW); w <= Math.min(idxs.length - 1, k + SMOOTH_WINDOW); w += 1) {
-      sum += alts[w]!;
-      cnt += 1;
-    }
-    smoothed[k] = sum / cnt;
+    for (let w = lo; w <= hi; w += 1) sum += base[w]!;
+    smoothed[k] = sum / (hi - lo + 1);
   }
 
+  const lift = Math.min(DRAWN_ARC_MAX_M, DRAWN_ARC_FRACTION * dTotal);
   const out: AssessedPathPoint[] = [];
   for (let k = 0; k < idxs.length; k += 1) {
     const i = idxs[k]!;
     const t = tAt(i);
-    // Final safety floor (rarely triggers — the uniform lift already clears;
-    // endpoints have margin 2 m == their antenna height so stay exact).
-    const altM = Math.max(smoothed[k]!, profile.heights[i]! + marginAt(t));
+    let altM = smoothed[k]! + lift * sinLift(t);
+    // Never underground.
+    altM = Math.max(altM, profile.heights[i]! + TERRAIN_CLEAR_MIN_M);
+    // Exact antenna heights at both ends.
+    if (k === 0) altM = hTxM;
+    if (k === idxs.length - 1) altM = hRxM;
     out.push({ lat: a.lat + t * (b.lat - a.lat), lon: a.lon + t * (b.lon - a.lon), altM });
   }
   return out;
