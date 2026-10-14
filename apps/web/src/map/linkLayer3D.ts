@@ -197,12 +197,15 @@ export class Link3DLayer implements CustomLayerInterface {
       const canvas = this.map.getCanvas();
       for (const material of this.materials) material.resolution.set(canvas.width, canvas.height);
       const s = this.origin.unitsPerMetre;
-      // MapLibre v6: custom layers project through
-      // `defaultProjectionData.mainMatrix`, which takes mercator [0..1]
-      // coordinates (converted to in-tile coords via tileMercatorCoords —
-      // identity for the world tile under mercator projection).
-      // `modelViewProjectionMatrix` does NOT accept mercator input in v6
-      // (drawing through it silently renders nothing).
+      // MapLibre v6: project through `defaultProjectionData.mainMatrix`,
+      // which takes mercator [0..1] coordinates (tileMercatorCoords is
+      // identity for the world tile under mercator projection). At pitch the
+      // matrix carries the z->y term (m9 ~ 1.36e6 at pitch 60), so altitude
+      // DOES displace on screen — pixel-measured: 300 m raises a marker ~19 px
+      // at z10. At pitch 0 the term is zero (nothing can show height flat).
+      // `modelViewProjectionMatrix` does NOT accept mercator input in v6 and
+      // `getProjectionData({tileID: ...})` requires a real tile ID (null
+      // throws and disables the layer) — do not use either.
       const proj = options.defaultProjectionData;
       const tmc = proj.tileMercatorCoords ?? [0, 0, 1, 1];
       const main = new THREE.Matrix4().fromArray(proj.mainMatrix as unknown as number[]);

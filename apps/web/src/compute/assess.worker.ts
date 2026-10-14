@@ -41,9 +41,22 @@ export interface AssessCandidate {
  * the full-resolution profile no drawn segment comes within 2 m of the
  * surface, so lines visibly float and can never graze/enter a hillside.
  */
+/** Visual clearance held above the ground when the sight ray would clip it. */
 const DRAWN_CLEARANCE_M = 20;
 /** Hard cap on drawn points per link (profiles are <= 200 by construction). */
 const DRAWN_PATH_MAX_POINTS = 200;
+/**
+ * Visual arc lift: at true antenna altitude a 10-27 km link is visually flat
+ * against the terrain (height separation of ~0.1% of the span — invisible),
+ * so the drawn line reads as "glued to the ground". The drawn path therefore
+ * arcs overhead like a strung wire: endpoints at the antennas, rising to a
+ * visible height at midspan, scaled with the link's length. This is a pure
+ * visualisation choice (flagged in the legend) — path loss numbers are
+ * unaffected.
+ */
+const DRAWN_ARC_MIN_M = 80;
+const DRAWN_ARC_MAX_M = 1500;
+const DRAWN_ARC_FRACTION = 0.12;
 
 /**
  * Build the drawn 3D path for a link from its sampled profile: the straight
@@ -66,6 +79,7 @@ export function buildDrawnPath(
   // straight segment between two points cut under an unsampled terrain spike
   // (measured down to 1.1 m clearance — visually grazing the hillside).
   const step = Math.max(1, Math.ceil(n / DRAWN_PATH_MAX_POINTS));
+  const arcH = Math.min(DRAWN_ARC_MAX_M, Math.max(DRAWN_ARC_MIN_M, DRAWN_ARC_FRACTION * dTotal));
   const out: AssessedPathPoint[] = [];
   for (let i = 0; i < n; i += step) {
     out.push(drawnPoint(i));
@@ -76,7 +90,10 @@ export function buildDrawnPath(
   function drawnPoint(i: number): AssessedPathPoint {
     const t = profile.dists[i]! / dTotal;
     const ray = hTxM + (hRxM - hTxM) * t;
-    const altM = Math.max(ray, profile.heights[i]! + DRAWN_CLEARANCE_M);
+    // Terrain-clearing base (never inside a hill) + the visual overhead arc
+    // (zero at both endpoints, peak at midspan).
+    const base = Math.max(ray, profile.heights[i]! + DRAWN_CLEARANCE_M);
+    const altM = base + arcH * Math.sin(Math.PI * t);
     return { lat: a.lat + t * (b.lat - a.lat), lon: a.lon + t * (b.lon - a.lon), altM };
   }
 }

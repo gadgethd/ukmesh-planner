@@ -809,8 +809,9 @@ export function App() {
             <li><span className="swatch" style={{ background: '#fbbf24' }} /> marginal (≤ 129.5 dB)</li>
           </ul>
           <p className="muted small">
-            Weaker paths are not shown. Links are drawn as 3D sight-line objects held clear of the
-            terrain — tilt with the 3D button to see them.
+            Weaker paths are not shown. Links are drawn as elevated 3D arcs between sites (held
+            clear of the terrain, arc height for visibility only) — tilt with the 3D button to see
+            them. Path-loss numbers are unaffected by the arc.
           </p>
           <p className="muted small">
             Links are drawn as 3D line-of-sight objects at antenna height — tilt with the 3D
