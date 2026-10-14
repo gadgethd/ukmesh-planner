@@ -9,6 +9,7 @@ import {
   assessLink,
   buildProfile,
   haversineDistanceM,
+  interpolateGreatCircle,
   computeItmPathLoss,
   sampleItmProfile,
   itmSignalBand,
@@ -182,6 +183,7 @@ export interface AssessedLink extends LinkResult {
 }
 
 export interface AssessResponse {
+
   type: 'assess-result';
   jobId: number;
   siteElevationM: number | null;
@@ -410,7 +412,7 @@ async function handle(req: AssessRequest): Promise<void> {
     for (const c of req.candidates) {
       await provider.warmPath(req.site, c, profile);
       const targetGroundM = provider.elevationAt(c);
-      const r = assessLink({
+      let r = assessLink({
         provider,
         source: {
           id: 'planned',
@@ -422,6 +424,24 @@ async function handle(req: AssessRequest): Promise<void> {
         rf: req.rf,
         profile,
       });
+      if (r.classification === 'unknown-terrain') {
+        // Self-heal a transient tile-cache race: re-warm the exact path once
+        // and retry before declaring the terrain missing (Ben 2026-10-14:
+        // spurious "missing terrain" exclusions on long paths).
+        await provider.warmPath(req.site, c, profile);
+        r = assessLink({
+          provider,
+          source: {
+            id: 'planned',
+            lat: req.site.lat,
+            lon: req.site.lon,
+            antennaHeightAglM: req.site.antennaHeightAglM,
+          },
+          target: { id: c.id, lat: c.lat, lon: c.lon, antennaHeightAglM: req.rf.rxHeightAglM },
+          rf: req.rf,
+          profile,
+        });
+      }
       if (r.classification === 'unknown-terrain') missingTerrain += 1;
       // MeshCore-convention neighbour metric: ITM path loss via the exact
       // live-system model, sampled on its own linear profile convention.

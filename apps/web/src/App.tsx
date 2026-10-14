@@ -229,12 +229,40 @@ export function App() {
       };
       let pass: Scored[] = within;
       if (within.some((x) => x.r.name)) {
-        const byName = new Map<string, Scored>();
+        // Same cleaned name clustered by PROXIMITY (~500 m) — a grid key
+        // misses aliases that straddle a cell boundary (GNOME-STKTN-RPT-V4
+        // appeared twice at 40 m apart, Ben 2026-10-14).
+        const ALIAS_RADIUS_M = 500;
+        const byName = new Map<string, Scored[]>();
         for (const x of within) {
-          if (x.r.name) mergeInto(byName, `${cleanKey(x.r.name)}|${x.r.lat.toFixed(3)}|${x.r.lon.toFixed(3)}`, x);
-          else mergeInto(byName, `anon|${x.r.canonicalId}`, x);
+          const key = x.r.name ? cleanKey(x.r.name) : `anon|${x.r.canonicalId}`;
+          const list = byName.get(key);
+          if (list) list.push(x);
+          else byName.set(key, [x]);
         }
-        pass = [...byName.values()];
+        const merged: Scored[] = [];
+        for (const [key, list] of byName) {
+          if (key.startsWith('anon|')) {
+            merged.push(...list);
+            continue;
+          }
+          const clusters: Scored[][] = [];
+          for (const x of list) {
+            const cl = clusters.find((c) =>
+              c.some(
+                (y) =>
+                  haversineDistanceM({ lat: x.r.lat, lon: x.r.lon }, { lat: y.r.lat, lon: y.r.lon }) <=
+                  ALIAS_RADIUS_M,
+              ),
+            );
+            if (cl) cl.push(x);
+            else clusters.push([x]);
+          }
+          for (const cl of clusters) {
+            merged.push(cl.reduce((best, x) => (aliasScore(x.r) > aliasScore(best.r) ? x : best)));
+          }
+        }
+        pass = merged;
       }
       const byPos = new Map<string, Scored>();
       for (const x of pass) mergeInto(byPos, `${x.r.lat.toFixed(4)}|${x.r.lon.toFixed(4)}`, x);

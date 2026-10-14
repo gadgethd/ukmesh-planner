@@ -476,3 +476,25 @@ by pixel measurements, not screenshots-by-eye):
 
 Note: at pitch 0 (flat) no projection can show height — the 3D button tilt
 is where the arcs read. Ben's flat-view screenshots can never show this.
+
+## 2026-10-14 (later) — duplicate rows + spurious "missing terrain" exclusions
+
+Ben: "thats not happy now as well" (screenshot: duplicate GNOME-STKTN-RPT-V4
+rows + "Missing terrain along 17 paths").
+
+- **Alias merge fixed:** same-name aliases were clustered by a lat/lon grid
+  key (toFixed(3)) which misses aliases that straddle a cell boundary
+  (GNOME-STKTN-RPT-V4 appeared twice at 40 m apart: 54.562317 rounds to
+  54.562, 54.562634 to 54.563). Now clustered by PROXIMITY (<= 500 m),
+  keeping the cleanest-named representative. Verified: single row live.
+- **Missing-terrain exclusions fixed (long paths):** the 160-tile cache
+  thrashed during a full candidate run; on long paths (70-98 km, ~30 tiles
+  each) some path tiles were missing from the cache at sampling time ->
+  bilinearSample null -> "unknown-terrain" -> path excluded (16-18 paths).
+  Instrumented the worker (post-warm cache checks + first-failing-sample
+  capture) to prove it; fixes: (a) tile fetch retries x3 with backoff +
+  15 s failure cooldown instead of permanent poisoning; (b) cache 160 -> 320
+  tiles; (c) the assess re-warms the exact path once and retries when a
+  path comes back unknown-terrain. Verified live at 54.55832,-1.12366:
+  0 unknown-terrain (was 18), 203/203 evaluated, post-warm cache checks 0
+  bad (was 5). Debug instrumentation removed after verification.

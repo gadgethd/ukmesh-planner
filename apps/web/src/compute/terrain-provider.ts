@@ -27,14 +27,23 @@ import {
 } from '../lib/tilemath.js';
 
 export const TERRAIN_REVISION = 'terrarium-os-terrain50-z12-v1';
-const MAX_CACHED_TILES = 160;
+// 320 tiles ~ 84 MB of f32 rasters: enough that a full candidate run
+// (~200 paths x up to ~35 tiles) stops thrashing the cache (Ben 2026-10-14
+// spurious missing-terrain exclusions traced to cache churn on long paths).
+const MAX_CACHED_TILES = 320;
 
 export class TerrariumTileProvider implements TerrainProvider {
   readonly revision = TERRAIN_REVISION;
   private cache = new Map<string, ElevationRaster>();
   private inflight = new Map<string, Promise<ElevationRaster | null>>();
-  /** Transient-failure bookkeeping: a tile that failed twice is treated as absent. */
-  private failed = new Map<string, number>();
+  /**
+   * Transient-failure bookkeeping: a tile that keeps failing is treated as
+   * absent for a short COOLDOWN only (never permanently — a transient network
+   * blip must not poison the tile for the session; that surfaced as spurious
+   * "missing terrain" path exclusions, Ben 2026-10-14).
+   */
+  private failed = new Map<string, { count: number; at: number }>();
+  private static readonly FAILURE_COOLDOWN_MS = 15_000;
 
   constructor(private readonly baseUrl = '/terrain-tiles') {}
 
@@ -46,28 +55,41 @@ export class TerrariumTileProvider implements TerrainProvider {
     const key = this.key(t);
     const cached = this.cache.get(key);
     if (cached) return cached;
-    if ((this.failed.get(key) ?? 0) >= 2) return null;
+    const f = this.failed.get(key);
+    if (f && f.count >= 2 && Date.now() - f.at < TerrariumTileProvider.FAILURE_COOLDOWN_MS) {
+      return null;
+    }
     const existing = this.inflight.get(key);
     if (existing) return existing;
 
     const promise = (async (): Promise<ElevationRaster | null> => {
       try {
-        const res = await fetch(`${this.baseUrl}/${t.z}/${t.x}/${t.y}.png`);
-        if (!res.ok) return null;
-        const blob = await res.blob();
-        const bmp = await createImageBitmap(blob);
-        const canvas = new OffscreenCanvas(bmp.width, bmp.height);
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return null;
-        ctx.drawImage(bmp, 0, 0);
-        const img = ctx.getImageData(0, 0, bmp.width, bmp.height);
-        const data = new Float32Array(img.width * img.height);
-        for (let i = 0; i < data.length; i += 1) {
-          const v = decodeTerrarium(img.data[i * 4]!, img.data[i * 4 + 1]!, img.data[i * 4 + 2]!);
-          data[i] = v === TERRARIUM_NODATA ? Number.NaN : v;
+        // Retry transient failures (network blips, throttling): a single
+        // failed fetch used to exclude whole paths as "missing terrain".
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            const res = await fetch(`${this.baseUrl}/${t.z}/${t.x}/${t.y}.png`);
+            if (!res.ok) {
+              await new Promise((r) => setTimeout(r, 150 * (attempt + 1) * (attempt + 1)));
+              continue;
+            }
+            const blob = await res.blob();
+            const bmp = await createImageBitmap(blob);
+            const canvas = new OffscreenCanvas(bmp.width, bmp.height);
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return null;
+            ctx.drawImage(bmp, 0, 0);
+            const img = ctx.getImageData(0, 0, bmp.width, bmp.height);
+            const data = new Float32Array(img.width * img.height);
+            for (let i = 0; i < data.length; i += 1) {
+              const v = decodeTerrarium(img.data[i * 4]!, img.data[i * 4 + 1]!, img.data[i * 4 + 2]!);
+              data[i] = v === TERRARIUM_NODATA ? Number.NaN : v;
+            }
+            return { width: img.width, height: img.height, data };
+          } catch {
+            await new Promise((r) => setTimeout(r, 150 * (attempt + 1) * (attempt + 1)));
+          }
         }
-        return { width: img.width, height: img.height, data };
-      } catch {
         return null;
       } finally {
         this.inflight.delete(key);
@@ -77,9 +99,9 @@ export class TerrariumTileProvider implements TerrainProvider {
     this.inflight.set(key, promise);
     const raster = await promise;
     if (raster === null) {
-      // Never cache a failure permanently: transient network errors must not
-      // poison the tile for the whole session. Retry once on next request.
-      this.failed.set(key, (this.failed.get(key) ?? 0) + 1);
+      // Never cache a failure permanently: brief cooldown, then retryable.
+      const prev = this.failed.get(key);
+      this.failed.set(key, { count: (prev?.count ?? 0) + 1, at: Date.now() });
       return null;
     }
     this.failed.delete(key);
