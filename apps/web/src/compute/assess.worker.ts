@@ -63,9 +63,10 @@ const DRAWN_ARC_FRACTION = 0.12;
  * at z10 (pixel-measured), which still reads as "flat". Multiplying the arc
  * component only (endpoints stay at the antennas) makes the links visibly
  * float. Ben's steer (2026-10-14): keep it a GENTLE arc — 6x read as "way
- * too high up"; 1.6x is the settled look. Path loss numbers are unaffected.
+ * too high up", 1.6x as "still too high": 0.5x is the settled look.
+ * Path loss numbers are unaffected.
  */
-const DRAWN_ARC_VISUAL_MULT = 1.6;
+const DRAWN_ARC_VISUAL_MULT = 0.5;
 
 /**
  * Build the drawn 3D path for a link from its sampled profile: the straight
@@ -89,22 +90,37 @@ export function buildDrawnPath(
   // (measured down to 1.1 m clearance — visually grazing the hillside).
   const step = Math.max(1, Math.ceil(n / DRAWN_PATH_MAX_POINTS));
   const arcH = Math.min(DRAWN_ARC_MAX_M, Math.max(DRAWN_ARC_MIN_M, DRAWN_ARC_FRACTION * dTotal));
-  const out: AssessedPathPoint[] = [];
-  for (let i = 0; i < n; i += step) {
-    out.push(drawnPoint(i));
-  }
-  if ((n - 1) % step !== 0) out.push(drawnPoint(n - 1));
-  return out;
-
-  function drawnPoint(i: number): AssessedPathPoint {
+  const idxs: number[] = [];
+  for (let i = 0; i < n; i += step) idxs.push(i);
+  if ((n - 1) % step !== 0) idxs.push(n - 1);
+  // Pass 1: raw altitude per point (terrain-clearing base + gentle arc).
+  const alts = idxs.map((i) => {
     const t = profile.dists[i]! / dTotal;
     const ray = hTxM + (hRxM - hTxM) * t;
-    // Terrain-clearing base (never inside a hill) + the visual overhead arc
-    // (zero at both endpoints, peak at midspan).
     const base = Math.max(ray, profile.heights[i]! + DRAWN_CLEARANCE_M);
-    const altM = base + DRAWN_ARC_VISUAL_MULT * arcH * Math.sin(Math.PI * t);
-    return { lat: a.lat + t * (b.lat - a.lat), lon: a.lon + t * (b.lon - a.lon), altM };
+    return base + DRAWN_ARC_VISUAL_MULT * arcH * Math.sin(Math.PI * t);
+  });
+  // Pass 2: light moving-average smoothing — the per-point terrain floor
+  // makes small slope changes between samples that render as kinks ("ugly,
+  // faceted" — Ben 2026-10-14). Smoothing keeps the arc fluid; endpoints are
+  // preserved, then the terrain floor is re-applied so the clearance
+  // guarantee is exact.
+  const SMOOTH_WINDOW = 2;
+  const out: AssessedPathPoint[] = [];
+  for (let k = 0; k < idxs.length; k += 1) {
+    const i = idxs[k]!;
+    const t = profile.dists[i]! / dTotal;
+    let sum = 0;
+    let cnt = 0;
+    for (let w = Math.max(0, k - SMOOTH_WINDOW); w <= Math.min(idxs.length - 1, k + SMOOTH_WINDOW); w += 1) {
+      sum += alts[w]!;
+      cnt += 1;
+    }
+    const smoothed = sum / cnt;
+    const altM = Math.max(smoothed, profile.heights[i]! + DRAWN_CLEARANCE_M);
+    out.push({ lat: a.lat + t * (b.lat - a.lat), lon: a.lon + t * (b.lon - a.lon), altM });
   }
+  return out;
 }
 
 export interface AssessRequest {
