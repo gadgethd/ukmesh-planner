@@ -451,3 +451,28 @@ exist anymore".
 - **Stale-bundle fix:** index.html served with Cache-Control: no-cache (the
   old shell was being cached by browsers, hiding deploys — a likely reason
   Ben saw the pre-fix behaviour after the fix shipped).
+
+## 2026-10-14 (early) — links finally read as 3D arcs in the air
+
+Ben: "the lines still arent 3d in the air". Root cause chain (all verified
+by pixel measurements, not screenshots-by-eye):
+
+1. The pitch projection DOES displace altitude, but weakly: pixel-measured
+   ~25 px per 1500 m at z10/pitch 60 (the earlier "altitude does nothing"
+   read came from a pitch-0 matrix dump — at pitch 0 the z->y term is
+   zero, as it must be).
+2. At true scale every honest altitude (2 m antenna, 20 m clearance, 500 m
+   arc) is therefore visually flat at these zooms.
+3. The fix: the arc is a VISUAL device (same spirit as terrain
+   exaggeration) — arc component x6 (DRAWN_ARC_VISUAL_MULT), endpoints stay
+   exactly at the antennas, terrain-clearing floor unchanged. Pixel-traced
+   the drawn line profile: y 473 -> 190 -> 291 across the fan = a 280 px
+   bow. Visible, verified.
+4. Also fixed en route: `getProjectionData({tileID: ...})` throws with a
+   null/absent tile ID and DISABLES the layer (render failed -> fail());
+   `modelViewProjectionMatrix` renders nothing with mercator input; the
+   working matrix is `defaultProjectionData.mainMatrix` (with the pitch
+   z->y term). tmc stays [0,0,1,1] at pitch.
+
+Note: at pitch 0 (flat) no projection can show height — the 3D button tilt
+is where the arcs read. Ben's flat-view screenshots can never show this.

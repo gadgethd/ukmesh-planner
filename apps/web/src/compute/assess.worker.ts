@@ -57,6 +57,14 @@ const DRAWN_PATH_MAX_POINTS = 200;
 const DRAWN_ARC_MIN_M = 80;
 const DRAWN_ARC_MAX_M = 1500;
 const DRAWN_ARC_FRACTION = 0.12;
+/**
+ * The arc is a pure visual device (like MapLibre's terrain exaggeration):
+ * at true scale the pitch projection compresses 1.5 km of height into ~25 px
+ * at z10 (pixel-measured), which still reads as "flat". Multiplying the arc
+ * component only (endpoints stay at the antennas) makes the links visibly
+ * float. Path loss numbers are unaffected.
+ */
+const DRAWN_ARC_VISUAL_MULT = 6;
 
 /**
  * Build the drawn 3D path for a link from its sampled profile: the straight
@@ -93,7 +101,7 @@ export function buildDrawnPath(
     // Terrain-clearing base (never inside a hill) + the visual overhead arc
     // (zero at both endpoints, peak at midspan).
     const base = Math.max(ray, profile.heights[i]! + DRAWN_CLEARANCE_M);
-    const altM = base + arcH * Math.sin(Math.PI * t);
+    const altM = base + DRAWN_ARC_VISUAL_MULT * arcH * Math.sin(Math.PI * t);
     return { lat: a.lat + t * (b.lat - a.lat), lon: a.lon + t * (b.lon - a.lon), altM };
   }
 }
