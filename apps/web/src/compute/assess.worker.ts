@@ -41,39 +41,35 @@ export interface AssessCandidate {
  * the full-resolution profile no drawn segment comes within 2 m of the
  * surface, so lines visibly float and can never graze/enter a hillside.
  */
-/** Visual clearance held above the ground when the sight ray would clip it. */
-const DRAWN_CLEARANCE_M = 20;
+/** Minimum ground clearance at the arc ENDPOINTS (the antennas themselves). */
+const TERRAIN_CLEAR_MIN_M = 2;
+/** Ground clearance demanded mid-path (terrain-aware arcs). */
+const TERRAIN_CLEAR_MARGIN_M = 25;
+/** Cap on the uniform terrain lift added to the arc (m). */
+const TERRAIN_LIFT_MAX_M = 2500;
 /** Hard cap on drawn points per link (profiles are <= 200 by construction). */
 const DRAWN_PATH_MAX_POINTS = 200;
 /**
- * Visual arc lift: at true antenna altitude a 10-27 km link is visually flat
- * against the terrain (height separation of ~0.1% of the span — invisible),
- * so the drawn line reads as "glued to the ground". The drawn path therefore
- * arcs overhead like a strung wire: endpoints at the antennas, rising to a
- * visible height at midspan, scaled with the link's length. This is a pure
- * visualisation choice (flagged in the legend) — path loss numbers are
- * unaffected.
+ * Gentle visual arc: mid-span lift, proportional to the link (max 750 m).
+ * This is a visual device like the map's terrain exaggeration — the arc
+ * exists so links read as airborne 3D objects; path loss numbers are
+ * unaffected. Settled with Ben 2026-10-14 (6x and 1.6x multipliers read as
+ * "way too high"; keep it gentle).
  */
-const DRAWN_ARC_MIN_M = 80;
-const DRAWN_ARC_MAX_M = 1500;
-const DRAWN_ARC_FRACTION = 0.12;
-/**
- * The arc is a pure visual device (like MapLibre's terrain exaggeration):
- * at true scale the pitch projection compresses 1.5 km of height into ~25 px
- * at z10 (pixel-measured), which still reads as "flat". Multiplying the arc
- * component only (endpoints stay at the antennas) makes the links visibly
- * float. Ben's steer (2026-10-14): keep it a GENTLE arc — 6x read as "way
- * too high up", 1.6x as "still too high": 0.5x is the settled look.
- * Path loss numbers are unaffected.
- */
-const DRAWN_ARC_VISUAL_MULT = 0.5;
+const DRAWN_ARC_FRACTION = 0.06;
+const DRAWN_ARC_MAX_M = 750;
 
 /**
- * Build the drawn 3D path for a link from its sampled profile: the straight
- * sight ray (hTx -> hRx) wherever it clears the terrain, lifted to
- * terrain + clearance wherever the ray would be inside a hill. The drawn
- * line therefore never disappears into the terrain, and the lift is visible
- * as the line riding over the ridges it has to clear.
+ * Build the drawn 3D path for a link (Ben's spec, 2026-10-14):
+ *  - starts at the site antenna and ENDS AT THE TARGET REPEATER'S HEIGHT
+ *    (both endpoints exact: ground + antenna height, zero arc);
+ *  - a gentle mid-span arc (proportional lift);
+ *  - terrain-aware: the arc is raised as a whole (uniform lift, solved
+ *    directly from the sampled profile) until it clears every crest by a
+ *    tapered margin (2 m at the endpoints -> 25 m mid-path), so the line
+ *    floats smoothly over high ground instead of kinking up over hills;
+ *  - lightly smoothed (interior only) so the profile sampling cannot render
+ *    as facets; endpoints stay exact after smoothing.
  */
 export function buildDrawnPath(
   a: { lat: number; lon: number },
@@ -85,39 +81,55 @@ export function buildDrawnPath(
   const n = profile.dists.length;
   if (n === 0) return [];
   const dTotal = profile.dists[n - 1] || 1;
-  // Full resolution (the profile's own ~100 m spacing): downsampling lets the
-  // straight segment between two points cut under an unsampled terrain spike
-  // (measured down to 1.1 m clearance — visually grazing the hillside).
   const step = Math.max(1, Math.ceil(n / DRAWN_PATH_MAX_POINTS));
-  const arcH = Math.min(DRAWN_ARC_MAX_M, Math.max(DRAWN_ARC_MIN_M, DRAWN_ARC_FRACTION * dTotal));
   const idxs: number[] = [];
   for (let i = 0; i < n; i += step) idxs.push(i);
   if ((n - 1) % step !== 0) idxs.push(n - 1);
-  // Pass 1: raw altitude per point (terrain-clearing base + gentle arc).
-  const alts = idxs.map((i) => {
-    const t = profile.dists[i]! / dTotal;
-    const ray = hTxM + (hRxM - hTxM) * t;
-    const base = Math.max(ray, profile.heights[i]! + DRAWN_CLEARANCE_M);
-    return base + DRAWN_ARC_VISUAL_MULT * arcH * Math.sin(Math.PI * t);
-  });
-  // Pass 2: light moving-average smoothing — the per-point terrain floor
-  // makes small slope changes between samples that render as kinks ("ugly,
-  // faceted" — Ben 2026-10-14). Smoothing keeps the arc fluid; endpoints are
-  // preserved, then the terrain floor is re-applied so the clearance
-  // guarantee is exact.
-  const SMOOTH_WINDOW = 2;
-  const out: AssessedPathPoint[] = [];
-  for (let k = 0; k < idxs.length; k += 1) {
+
+  const sinLift = (t: number): number => Math.sin(Math.PI * t);
+  const marginAt = (t: number): number =>
+    TERRAIN_CLEAR_MIN_M + (TERRAIN_CLEAR_MARGIN_M - TERRAIN_CLEAR_MIN_M) * sinLift(t);
+  const lift = Math.min(DRAWN_ARC_MAX_M, DRAWN_ARC_FRACTION * dTotal);
+
+  const tAt = (i: number): number => profile.dists[i]! / dTotal;
+  // Straight sight ray: exact antenna altitudes at both ends.
+  const rayAt = (t: number): number => hTxM + (hRxM - hTxM) * t;
+
+  // Terrain awareness: the smallest uniform lift that makes the arc clear
+  // every interior sample by the tapered margin (solved directly).
+  let extra = 0;
+  for (let k = 1; k < idxs.length - 1; k += 1) {
     const i = idxs[k]!;
-    const t = profile.dists[i]! / dTotal;
+    const t = tAt(i);
+    const s = sinLift(t);
+    if (s < 1e-3) continue;
+    const need = (profile.heights[i]! + marginAt(t) - rayAt(t)) / s - lift;
+    if (need > extra) extra = need;
+  }
+  extra = Math.min(extra, TERRAIN_LIFT_MAX_M);
+
+  const alts = idxs.map((i) => rayAt(tAt(i)) + (lift + extra) * sinLift(tAt(i)));
+
+  // Light smoothing, interior only; endpoints stay exact.
+  const SMOOTH_WINDOW = 2;
+  const smoothed = alts.slice();
+  for (let k = 1; k < idxs.length - 1; k += 1) {
     let sum = 0;
     let cnt = 0;
     for (let w = Math.max(0, k - SMOOTH_WINDOW); w <= Math.min(idxs.length - 1, k + SMOOTH_WINDOW); w += 1) {
       sum += alts[w]!;
       cnt += 1;
     }
-    const smoothed = sum / cnt;
-    const altM = Math.max(smoothed, profile.heights[i]! + DRAWN_CLEARANCE_M);
+    smoothed[k] = sum / cnt;
+  }
+
+  const out: AssessedPathPoint[] = [];
+  for (let k = 0; k < idxs.length; k += 1) {
+    const i = idxs[k]!;
+    const t = tAt(i);
+    // Final safety floor (rarely triggers — the uniform lift already clears;
+    // endpoints have margin 2 m == their antenna height so stay exact).
+    const altM = Math.max(smoothed[k]!, profile.heights[i]! + marginAt(t));
     out.push({ lat: a.lat + t * (b.lat - a.lat), lon: a.lon + t * (b.lon - a.lon), altM });
   }
   return out;
