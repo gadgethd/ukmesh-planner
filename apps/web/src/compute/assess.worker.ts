@@ -62,9 +62,10 @@ const DRAWN_ARC_FRACTION = 0.12;
  * at true scale the pitch projection compresses 1.5 km of height into ~25 px
  * at z10 (pixel-measured), which still reads as "flat". Multiplying the arc
  * component only (endpoints stay at the antennas) makes the links visibly
- * float. Path loss numbers are unaffected.
+ * float. Ben's steer (2026-10-14): keep it a GENTLE arc — 6x read as "way
+ * too high up"; 1.6x is the settled look. Path loss numbers are unaffected.
  */
-const DRAWN_ARC_VISUAL_MULT = 6;
+const DRAWN_ARC_VISUAL_MULT = 1.6;
 
 /**
  * Build the drawn 3D path for a link from its sampled profile: the straight
