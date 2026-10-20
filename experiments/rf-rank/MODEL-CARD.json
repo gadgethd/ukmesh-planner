@@ -1,0 +1,53 @@
+{
+ "candidate_id": "realworld1-candidate-v",
+ "status": "experimental",
+ "provenance": {
+  "campaign": "planner-validation1",
+  "parent_campaign": "realworld1",
+  "frozen_at": "2026-10-20",
+  "retrained_after_sealed": false
+ },
+ "artifacts": {
+  "b_rank.txt": {
+   "sha256": "c3e5aeff5283a3276c0e1c43d04281a36e0ec4b618f2f09cf76f11710400b4f6",
+   "features": 56
+  },
+  "hf_rank.txt": {
+   "sha256": "b3c3e0837bddf686e9a8a8f206e70bd7d658cb369d8d268832a72c503939d2a1",
+   "features": 58
+  },
+  "BANDS.json": {
+   "sha256": "6dc0598a6435c11e0b78ebb8621866430747cc2f434cf5fac7525250b7245249"
+  }
+ },
+ "ensemble": "rank-avg(distance, B, ITM_bandcorrected, heightflag)",
+ "metrics": {
+  "dev_pair_node_disjoint_auc": 0.7834,
+  "dev_pair_node_disjoint_ap": 0.6016,
+  "sealed_pair_auc_B_alone": 0.8189,
+  "sealed_pair_ap_B_alone": 0.584,
+  "planner_ndcg10_481_sites": 0.5002,
+  "planner_p10_481_sites": 0.2968,
+  "terrain_only_auc": 0.7025,
+  "distance_ndcg10": 0.3818,
+  "itm_ndcg10": 0.4554
+ },
+ "allowed_claims": [
+  "relative ordering of candidate links within one proposed site",
+  "comparison against distance, ITM and terrain-only baselines"
+ ],
+ "forbidden_claims": [
+  "probability of link success",
+  "calibrated confidence",
+  "guaranteed connectivity or range",
+  "generalisation to unobserved regions",
+  "topology-based prediction for a new site"
+ ],
+ "known_limitations": [
+  "label is recorded adjacency, not measured transmission success",
+  "only 5.2% of positive labels have decoded-path corroboration",
+  "equipment metadata is sparse; antenna-height availability is an instrumentation proxy",
+  "no transmission-attempt ground truth; no calibrated probabilities",
+  "time split and regional holdout were unsupported in the parent campaign"
+ ]
+}
