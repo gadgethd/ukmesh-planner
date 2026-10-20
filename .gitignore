@@ -39,3 +39,5 @@ test-results/
 # Built WASM artifacts (produced by `npm run build:wasm`)
 apps/web/public/wasm/*.wasm
 apps/web/public/wasm/*.wat
+experiments/rf-rank/__pycache__/
+experiments/rf-rank/tests/__pycache__/
