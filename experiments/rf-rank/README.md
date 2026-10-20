@@ -80,6 +80,17 @@ python -m unittest discover -s experiments/rf-rank/tests -v   # 14 tests
 Covers determinism, tie-breaking, top-k, missing metadata, invalid coordinates, empty/duplicate
 candidates, no-probability language, range warnings and finite terms.
 
+## Prospective ledger
+
+`ledger.py` is an append-only, hash-chained record of predictions made with this service. Each record
+carries the request, the model sha, an input hash and the ranking; `verify` detects any edit to an
+earlier prediction. See \`PREDICTION-LEDGER\` usage in the campaign workspace.
+
+```bash
+python ledger.py append --ledger preds.jsonl --input req.json --result res.json --region NE
+python ledger.py verify --ledger preds.jsonl
+```
+
 ## Integration path (not done here)
 
 A native planner integration needs the 51-feature vector in TypeScript, or a precomputed feature
