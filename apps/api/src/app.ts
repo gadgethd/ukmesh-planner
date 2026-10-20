@@ -17,6 +17,7 @@ import {
 import type { LinkQuery, Page, RepeaterQuery } from './snapshot.js';
 import { makeRateLimiter } from './rateLimit.js';
 import { registerShareRoutes, type ShareStore } from './shares.js';
+import { registerExperimentalRank, type ExperimentalRankOptions } from './experimentalRank.js';
 
 export interface AppDeps {
   getSnapshotMeta?: () => Promise<SnapshotMeta | null>;
@@ -32,6 +33,8 @@ export interface AppDeps {
   }>;
   /** Plan-sharing store (stage 6); routes mount only when it is configured. */
   shareStore?: ShareStore;
+  /** Experimental out-of-process RF ranking (planner-validation1); off unless configured. */
+  experimentalRank?: ExperimentalRankOptions;
   rateLimit?: { windowMs: number; max: number };
 }
 
@@ -63,6 +66,7 @@ export function parseBbox(raw: unknown): { ok: true; bbox: Bbox | null } | { ok:
 export function buildApp(deps: AppDeps = {}): FastifyInstance {
   const app = Fastify({ logger: false });
   const limiter = makeRateLimiter(deps.rateLimit ?? { windowMs: 60_000, max: 240 });
+  if (deps.experimentalRank) registerExperimentalRank(app, deps.experimentalRank);
 
   // Rate-limit all data routes (health probes exempt).
   app.addHook('onRequest', async (req, reply) => {
