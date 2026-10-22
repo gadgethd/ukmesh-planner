@@ -42,6 +42,7 @@ struct Params {
   maxSamples: f32,
   rowOffset: f32,
   nanValue: f32, // runtime NaN (constant NaN is rejected by WGSL const-eval)
+  bandRows: f32,
 }
 
 @group(0) @binding(0) var<uniform> params: Params;
@@ -231,8 +232,9 @@ fn knifeEdgeLossDb(v: f32) -> f32 {
 fn main(@builtin(global_invocation_id) gid: vec3u) {
   let cx = gid.x;
   let cy = gid.y + u32(params.rowOffset);
-  if (cx >= u32(params.outW) || cy >= u32(params.outH)) { return; }
-  let idx = cy * u32(params.outW) + cx;
+  if (cx >= u32(params.outW) || cy >= u32(params.outH) || gid.y >= u32(params.bandRows)) { return; }
+  // Output buffers contain only this band; world coordinates still use cy.
+  let idx = gid.y * u32(params.outW) + cx;
 
   // Cell centre (mirrors cellCenterLonLat).
   let cellPx = vec2f(

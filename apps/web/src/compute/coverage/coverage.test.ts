@@ -72,6 +72,8 @@ describe('backend selection', () => {
     expect(isSoftwareAdapter({ info: { description: 'SwiftShader Device' } })).toBe(true);
     expect(isSoftwareAdapter({ info: { description: 'llvmpipe' } })).toBe(true);
     expect(isSoftwareAdapter({ info: { architecture: 'rdna3' } })).toBe(false);
+    expect(isSoftwareAdapter({ info: { description: 'Mesa Intel(R) UHD Graphics 620' } })).toBe(false);
+    expect(isSoftwareAdapter({ info: { description: 'Mesa llvmpipe' } })).toBe(true);
   });
 });
 
@@ -127,5 +129,19 @@ describe('cpu coverage kernel', () => {
     const a = await runCoverageCpu({ site, geometry: geo, rf, provider: new SyntheticProvider(() => 120) });
     const b = await runCoverageCpu({ site, geometry: geo, rf, provider: new SyntheticProvider(() => 120) });
     expect(Array.from(a.codes)).toEqual(Array.from(b.codes));
+  });
+});
+
+describe('backend selection failures', () => {
+  it('adapter rejection is a clean WASM fallback', async () => {
+    const gpu: GpuLike = { requestAdapter: async () => { throw new Error('permission denied'); } };
+    const out = await chooseCoverageBackend(gpu);
+    expect(out.backend).toBe('wasm'); expect(out.reason).toContain('permission denied');
+  });
+  it('does not request a device for a software adapter', async () => {
+    const { vi } = await import('vitest');
+    const requestDevice = vi.fn(async () => ({}));
+    await chooseCoverageBackend({ requestAdapter: async () => ({ info: { description: 'Mesa llvmpipe' }, requestDevice }) });
+    expect(requestDevice).not.toHaveBeenCalled();
   });
 });

@@ -1,0 +1,670 @@
+{
+  "recordedDate": "2026-10-22",
+  "browser": "Headless Chromium 153 / SwiftShader on Linux x86_64",
+  "fixtureVersion": "coverage-synthetic-v1",
+  "camera": {
+    "width": 512,
+    "height": 512,
+    "bearing": 0,
+    "pitch": 0
+  },
+  "fixtures": {
+    "flat": {
+      "cpu": {
+        "codes": "790e38470e235bfc2057c4f63d866a6fcbb739c12f4ac666462a579eae7a499f",
+        "rgba": "fba0874621faf644bdb35470e4198be0b73fba7055a377d8f68d721af76485d0",
+        "margins": "c98e7bec839f851f367c5e11abd8f55a6cd3fb5334748497c002d3f0e935ec01"
+      },
+      "repeat": {
+        "codes": "790e38470e235bfc2057c4f63d866a6fcbb739c12f4ac666462a579eae7a499f",
+        "rgba": "fba0874621faf644bdb35470e4198be0b73fba7055a377d8f68d721af76485d0",
+        "margins": "c98e7bec839f851f367c5e11abd8f55a6cd3fb5334748497c002d3f0e935ec01"
+      },
+      "wasm": {
+        "codes": "790e38470e235bfc2057c4f63d866a6fcbb739c12f4ac666462a579eae7a499f",
+        "rgba": "fba0874621faf644bdb35470e4198be0b73fba7055a377d8f68d721af76485d0",
+        "margins": "1938619020671d6603bd01c13c7b7f06e477e9fb734c7c188258b2f13950c0ea"
+      },
+      "gpu": {
+        "codes": "790e38470e235bfc2057c4f63d866a6fcbb739c12f4ac666462a579eae7a499f",
+        "rgba": "fba0874621faf644bdb35470e4198be0b73fba7055a377d8f68d721af76485d0",
+        "margins": "4cb3fbf06b9241551fa5ba67d7f3a937ff74f6fd5e7eb7c41f2a9c4619d804fd"
+      },
+      "parity": {
+        "cells": 1024,
+        "finite": 1024,
+        "meanDeltaDb": 0.00038157403469085693,
+        "maxDeltaDb": 0.015662193298339844,
+        "maskMismatches": 0,
+        "classificationMismatches": 0,
+        "boundaryCells": [],
+        "unexplainedMismatches": 0,
+        "pixelChannels": 0,
+        "pass": true
+      },
+      "wasmParity": {
+        "cells": 1024,
+        "finite": 1024,
+        "meanDeltaDb": 6.06197863817215e-06,
+        "maxDeltaDb": 0.006207466125488281,
+        "maskMismatches": 0,
+        "classificationMismatches": 0,
+        "boundaryCells": [],
+        "unexplainedMismatches": 0,
+        "pixelChannels": 0,
+        "pass": true
+      },
+      "counts": [
+        332,
+        0,
+        0,
+        692,
+        0,
+        0
+      ]
+    },
+    "ridge": {
+      "cpu": {
+        "codes": "f018626f4e231466ac555477cd4b722789565266f6eb221e55e1005121468e41",
+        "rgba": "ed353b182fd0d851e1e48487f4077e967fee406f79ce06357991af3fe5b9f8fc",
+        "margins": "85c9b45ca1ec6696bf603f00882843f87e855e3fb07980f35c7fdc3c351abb4e"
+      },
+      "repeat": {
+        "codes": "f018626f4e231466ac555477cd4b722789565266f6eb221e55e1005121468e41",
+        "rgba": "ed353b182fd0d851e1e48487f4077e967fee406f79ce06357991af3fe5b9f8fc",
+        "margins": "85c9b45ca1ec6696bf603f00882843f87e855e3fb07980f35c7fdc3c351abb4e"
+      },
+      "wasm": {
+        "codes": "f018626f4e231466ac555477cd4b722789565266f6eb221e55e1005121468e41",
+        "rgba": "ed353b182fd0d851e1e48487f4077e967fee406f79ce06357991af3fe5b9f8fc",
+        "margins": "85c9b45ca1ec6696bf603f00882843f87e855e3fb07980f35c7fdc3c351abb4e"
+      },
+      "gpu": {
+        "codes": "f018626f4e231466ac555477cd4b722789565266f6eb221e55e1005121468e41",
+        "rgba": "ed353b182fd0d851e1e48487f4077e967fee406f79ce06357991af3fe5b9f8fc",
+        "margins": "7fa05da62e7b3ef120210b65c328d188466e160ab5254a02d4b9da159836ce7d"
+      },
+      "parity": {
+        "cells": 1024,
+        "finite": 1024,
+        "meanDeltaDb": 0.04132890794426203,
+        "maxDeltaDb": 3.1425609588623047,
+        "maskMismatches": 0,
+        "classificationMismatches": 0,
+        "boundaryCells": [],
+        "unexplainedMismatches": 0,
+        "pixelChannels": 0,
+        "pass": true
+      },
+      "wasmParity": {
+        "cells": 1024,
+        "finite": 1024,
+        "meanDeltaDb": 0,
+        "maxDeltaDb": 0,
+        "maskMismatches": 0,
+        "classificationMismatches": 0,
+        "boundaryCells": [],
+        "unexplainedMismatches": 0,
+        "pixelChannels": 0,
+        "pass": true
+      },
+      "counts": [
+        258,
+        0,
+        0,
+        766,
+        0,
+        0
+      ]
+    },
+    "hills": {
+      "cpu": {
+        "codes": "7a5e4f8ec7721661e98672d2496e8ef941325d4f2ecf84b6088d1f459f51ea78",
+        "rgba": "7ab5948d49f9d2155d68bec449afbbadf9030653daeafda8c1559eea01836918",
+        "margins": "5d37a4c73bad8a352aff4d1f5c1973e629504132c0f0ee67f965383853201afe"
+      },
+      "repeat": {
+        "codes": "7a5e4f8ec7721661e98672d2496e8ef941325d4f2ecf84b6088d1f459f51ea78",
+        "rgba": "7ab5948d49f9d2155d68bec449afbbadf9030653daeafda8c1559eea01836918",
+        "margins": "5d37a4c73bad8a352aff4d1f5c1973e629504132c0f0ee67f965383853201afe"
+      },
+      "wasm": {
+        "codes": "7a5e4f8ec7721661e98672d2496e8ef941325d4f2ecf84b6088d1f459f51ea78",
+        "rgba": "7ab5948d49f9d2155d68bec449afbbadf9030653daeafda8c1559eea01836918",
+        "margins": "5d37a4c73bad8a352aff4d1f5c1973e629504132c0f0ee67f965383853201afe"
+      },
+      "gpu": {
+        "codes": "028c28a0679ddc7fe78cbbc8426aadecabb90c62db47d01858f26e1334533d5d",
+        "rgba": "51b4da9aa8e85a3441ef5f503c812896390a28be113ce1af3075fe9d775b1bbf",
+        "margins": "939fb0f61b070d765c3f3edce91995777f061ee9491175a0205c2404733e8b59"
+      },
+      "parity": {
+        "cells": 1024,
+        "finite": 1024,
+        "meanDeltaDb": 0.05796144922805979,
+        "maxDeltaDb": 6.069475173950195,
+        "maskMismatches": 0,
+        "classificationMismatches": 2,
+        "boundaryCells": [
+          {
+            "index": 569,
+            "cpu": 0,
+            "gpu": 3,
+            "cpuDb": 15.007246017456055,
+            "gpuDb": 14.996475219726562
+          },
+          {
+            "index": 748,
+            "cpu": 0,
+            "gpu": 3,
+            "cpuDb": 15.076700210571289,
+            "gpuDb": 14.997100830078125
+          }
+        ],
+        "unexplainedMismatches": 0,
+        "pixelChannels": 8,
+        "pass": true
+      },
+      "wasmParity": {
+        "cells": 1024,
+        "finite": 1024,
+        "meanDeltaDb": 0,
+        "maxDeltaDb": 0,
+        "maskMismatches": 0,
+        "classificationMismatches": 0,
+        "boundaryCells": [],
+        "unexplainedMismatches": 0,
+        "pixelChannels": 0,
+        "pass": true
+      },
+      "counts": [
+        227,
+        0,
+        0,
+        797,
+        0,
+        0
+      ]
+    },
+    "coast": {
+      "cpu": {
+        "codes": "99ec24ea219058cdd3e0608cced9d9a331229d504e38628aa751dd71768899ca",
+        "rgba": "76425fe2286771da6e1dc0add3c708e7205369fe77eb45ecafafe641e0b2497a",
+        "margins": "6fcd72405174699ac59297c48a3f2dccd607e571886d3d31d4e7ca690db78877"
+      },
+      "repeat": {
+        "codes": "99ec24ea219058cdd3e0608cced9d9a331229d504e38628aa751dd71768899ca",
+        "rgba": "76425fe2286771da6e1dc0add3c708e7205369fe77eb45ecafafe641e0b2497a",
+        "margins": "6fcd72405174699ac59297c48a3f2dccd607e571886d3d31d4e7ca690db78877"
+      },
+      "wasm": {
+        "codes": "99ec24ea219058cdd3e0608cced9d9a331229d504e38628aa751dd71768899ca",
+        "rgba": "76425fe2286771da6e1dc0add3c708e7205369fe77eb45ecafafe641e0b2497a",
+        "margins": "6fcd72405174699ac59297c48a3f2dccd607e571886d3d31d4e7ca690db78877"
+      },
+      "gpu": {
+        "codes": "99ec24ea219058cdd3e0608cced9d9a331229d504e38628aa751dd71768899ca",
+        "rgba": "76425fe2286771da6e1dc0add3c708e7205369fe77eb45ecafafe641e0b2497a",
+        "margins": "45caeafb922463dc288d9cd5088e5fce41e55b6dbab601b4bdeb91c28eff3966"
+      },
+      "parity": {
+        "cells": 1024,
+        "finite": 1024,
+        "meanDeltaDb": 0.04111194610595703,
+        "maxDeltaDb": 6.034839630126953,
+        "maskMismatches": 0,
+        "classificationMismatches": 0,
+        "boundaryCells": [],
+        "unexplainedMismatches": 0,
+        "pixelChannels": 0,
+        "pass": true
+      },
+      "wasmParity": {
+        "cells": 1024,
+        "finite": 1024,
+        "meanDeltaDb": 0,
+        "maxDeltaDb": 0,
+        "maskMismatches": 0,
+        "classificationMismatches": 0,
+        "boundaryCells": [],
+        "unexplainedMismatches": 0,
+        "pixelChannels": 0,
+        "pass": true
+      },
+      "counts": [
+        534,
+        0,
+        0,
+        490,
+        0,
+        0
+      ]
+    },
+    "missing-dem": {
+      "cpu": {
+        "codes": "ab29cc2d88429d3f39c28cd6147b204615b41f0cd80d605222d3cc0e15fe0ffd",
+        "rgba": "820fe9877ff205dc7f672fa0d9de64c736461ffefe39a1bc42e1d771de1058c3",
+        "margins": "c1f6acb126409b0682d38cc685a1091bedfe2e034ceb36fae542fd0bab42b486"
+      },
+      "repeat": {
+        "codes": "ab29cc2d88429d3f39c28cd6147b204615b41f0cd80d605222d3cc0e15fe0ffd",
+        "rgba": "820fe9877ff205dc7f672fa0d9de64c736461ffefe39a1bc42e1d771de1058c3",
+        "margins": "c1f6acb126409b0682d38cc685a1091bedfe2e034ceb36fae542fd0bab42b486"
+      },
+      "wasm": {
+        "codes": "ab29cc2d88429d3f39c28cd6147b204615b41f0cd80d605222d3cc0e15fe0ffd",
+        "rgba": "820fe9877ff205dc7f672fa0d9de64c736461ffefe39a1bc42e1d771de1058c3",
+        "margins": "c1f6acb126409b0682d38cc685a1091bedfe2e034ceb36fae542fd0bab42b486"
+      },
+      "gpu": {
+        "codes": "ab29cc2d88429d3f39c28cd6147b204615b41f0cd80d605222d3cc0e15fe0ffd",
+        "rgba": "820fe9877ff205dc7f672fa0d9de64c736461ffefe39a1bc42e1d771de1058c3",
+        "margins": "65fd59dd60119ec54176da379a23a86b76a441421f0d5ba92ab40e1c42371c75"
+      },
+      "parity": {
+        "cells": 1024,
+        "finite": 704,
+        "meanDeltaDb": 0.0003761506893418052,
+        "maxDeltaDb": 0.012824058532714844,
+        "maskMismatches": 0,
+        "classificationMismatches": 0,
+        "boundaryCells": [],
+        "unexplainedMismatches": 0,
+        "pixelChannels": 0,
+        "pass": true
+      },
+      "wasmParity": {
+        "cells": 1024,
+        "finite": 704,
+        "meanDeltaDb": 0,
+        "maxDeltaDb": 0,
+        "maskMismatches": 0,
+        "classificationMismatches": 0,
+        "boundaryCells": [],
+        "unexplainedMismatches": 0,
+        "pixelChannels": 0,
+        "pass": true
+      },
+      "counts": [
+        282,
+        0,
+        0,
+        422,
+        320,
+        0
+      ]
+    },
+    "range-cutoff": {
+      "cpu": {
+        "codes": "ac76482b14b8dc6cca137ce0dff6e1606b0387a6cd576b9b1b7ab71c0e2a6651",
+        "rgba": "48e2718449a4b0ffb623c3e31c46fa7d1aa6d81ffe379656cd2c450ae0dda8a7",
+        "margins": "d53a768c65180351015cbf43f6776b53dde9210481803fe966ed027136c090dd"
+      },
+      "repeat": {
+        "codes": "ac76482b14b8dc6cca137ce0dff6e1606b0387a6cd576b9b1b7ab71c0e2a6651",
+        "rgba": "48e2718449a4b0ffb623c3e31c46fa7d1aa6d81ffe379656cd2c450ae0dda8a7",
+        "margins": "d53a768c65180351015cbf43f6776b53dde9210481803fe966ed027136c090dd"
+      },
+      "wasm": {
+        "codes": "ac76482b14b8dc6cca137ce0dff6e1606b0387a6cd576b9b1b7ab71c0e2a6651",
+        "rgba": "48e2718449a4b0ffb623c3e31c46fa7d1aa6d81ffe379656cd2c450ae0dda8a7",
+        "margins": "d53a768c65180351015cbf43f6776b53dde9210481803fe966ed027136c090dd"
+      },
+      "gpu": {
+        "codes": "ac76482b14b8dc6cca137ce0dff6e1606b0387a6cd576b9b1b7ab71c0e2a6651",
+        "rgba": "48e2718449a4b0ffb623c3e31c46fa7d1aa6d81ffe379656cd2c450ae0dda8a7",
+        "margins": "fffeca2ce75640a21efe0e4ad5a4dbc0b4e00ca6d066cc35b285a621fe78d81f"
+      },
+      "parity": {
+        "cells": 1024,
+        "finite": 32,
+        "meanDeltaDb": 0.0008420944213867188,
+        "maxDeltaDb": 0.00439453125,
+        "maskMismatches": 0,
+        "classificationMismatches": 0,
+        "boundaryCells": [],
+        "unexplainedMismatches": 0,
+        "pixelChannels": 0,
+        "pass": true
+      },
+      "wasmParity": {
+        "cells": 1024,
+        "finite": 32,
+        "meanDeltaDb": 0,
+        "maxDeltaDb": 0,
+        "maskMismatches": 0,
+        "classificationMismatches": 0,
+        "boundaryCells": [],
+        "unexplainedMismatches": 0,
+        "pixelChannels": 0,
+        "pass": true
+      },
+      "counts": [
+        32,
+        0,
+        0,
+        0,
+        0,
+        992
+      ]
+    },
+    "raised-mast": {
+      "cpu": {
+        "codes": "dbc858c431cb559a50b46a9319033391f9e2b599a397d0964a5fa485feb6af8a",
+        "rgba": "aa022072a26f1a4a2134e12929caf3a4d242b428b25700ccc87b70c97ff9d67b",
+        "margins": "c017efec10bce836b1c7374fc36ff85f3ff10dc90ff4421db861341f5e01353d"
+      },
+      "repeat": {
+        "codes": "dbc858c431cb559a50b46a9319033391f9e2b599a397d0964a5fa485feb6af8a",
+        "rgba": "aa022072a26f1a4a2134e12929caf3a4d242b428b25700ccc87b70c97ff9d67b",
+        "margins": "c017efec10bce836b1c7374fc36ff85f3ff10dc90ff4421db861341f5e01353d"
+      },
+      "wasm": {
+        "codes": "dbc858c431cb559a50b46a9319033391f9e2b599a397d0964a5fa485feb6af8a",
+        "rgba": "aa022072a26f1a4a2134e12929caf3a4d242b428b25700ccc87b70c97ff9d67b",
+        "margins": "c017efec10bce836b1c7374fc36ff85f3ff10dc90ff4421db861341f5e01353d"
+      },
+      "gpu": {
+        "codes": "dbc858c431cb559a50b46a9319033391f9e2b599a397d0964a5fa485feb6af8a",
+        "rgba": "aa022072a26f1a4a2134e12929caf3a4d242b428b25700ccc87b70c97ff9d67b",
+        "margins": "fa88629468f3d6bc7e326878fcba72171f50923e8efbd6e25b8cb5baf25075bb"
+      },
+      "parity": {
+        "cells": 1024,
+        "finite": 1024,
+        "meanDeltaDb": 0.016074571758508682,
+        "maxDeltaDb": 1.0600872039794922,
+        "maskMismatches": 0,
+        "classificationMismatches": 0,
+        "boundaryCells": [],
+        "unexplainedMismatches": 0,
+        "pixelChannels": 0,
+        "pass": true
+      },
+      "wasmParity": {
+        "cells": 1024,
+        "finite": 1024,
+        "meanDeltaDb": 0,
+        "maxDeltaDb": 0,
+        "maskMismatches": 0,
+        "classificationMismatches": 0,
+        "boundaryCells": [],
+        "unexplainedMismatches": 0,
+        "pixelChannels": 0,
+        "pass": true
+      },
+      "counts": [
+        624,
+        0,
+        0,
+        400,
+        0,
+        0
+      ]
+    },
+    "high-latitude": {
+      "cpu": {
+        "codes": "7a5e4f8ec7721661e98672d2496e8ef941325d4f2ecf84b6088d1f459f51ea78",
+        "rgba": "7ab5948d49f9d2155d68bec449afbbadf9030653daeafda8c1559eea01836918",
+        "margins": "4d6a7b98f0308af3a6bde12e156ea0363aaa10154e78bb6cf36fe3e6faf4d631"
+      },
+      "repeat": {
+        "codes": "7a5e4f8ec7721661e98672d2496e8ef941325d4f2ecf84b6088d1f459f51ea78",
+        "rgba": "7ab5948d49f9d2155d68bec449afbbadf9030653daeafda8c1559eea01836918",
+        "margins": "4d6a7b98f0308af3a6bde12e156ea0363aaa10154e78bb6cf36fe3e6faf4d631"
+      },
+      "wasm": {
+        "codes": "7a5e4f8ec7721661e98672d2496e8ef941325d4f2ecf84b6088d1f459f51ea78",
+        "rgba": "7ab5948d49f9d2155d68bec449afbbadf9030653daeafda8c1559eea01836918",
+        "margins": "4d6a7b98f0308af3a6bde12e156ea0363aaa10154e78bb6cf36fe3e6faf4d631"
+      },
+      "gpu": {
+        "codes": "7cf1d973fd7762b5ccc1fa065fcafd9cec7bcfd018221e89d4f884aff9d9b573",
+        "rgba": "df0ed5255d5f496678ec4a3b88d01ca67e794af6b80777d3b43f0882183cb542",
+        "margins": "37618ee263ac00034753f306bd3fee4c47a4a989522632bc2bd8bd1fb2d13a15"
+      },
+      "parity": {
+        "cells": 1024,
+        "finite": 1024,
+        "meanDeltaDb": 0.06352582382351102,
+        "maxDeltaDb": 6.044649124145508,
+        "maskMismatches": 0,
+        "classificationMismatches": 1,
+        "boundaryCells": [
+          {
+            "index": 569,
+            "cpu": 0,
+            "gpu": 3,
+            "cpuDb": 15.005696296691895,
+            "gpuDb": 14.97979736328125
+          }
+        ],
+        "unexplainedMismatches": 0,
+        "pixelChannels": 4,
+        "pass": true
+      },
+      "wasmParity": {
+        "cells": 1024,
+        "finite": 1024,
+        "meanDeltaDb": 0,
+        "maxDeltaDb": 0,
+        "maskMismatches": 0,
+        "classificationMismatches": 0,
+        "boundaryCells": [],
+        "unexplainedMismatches": 0,
+        "pixelChannels": 0,
+        "pass": true
+      },
+      "counts": [
+        227,
+        0,
+        0,
+        797,
+        0,
+        0
+      ]
+    },
+    "low-budget": {
+      "cpu": {
+        "codes": "d9d2e1b86dbf949dcf3628a45396efe131ccdd7c0d9fcf7f6e3beb197b30f26f",
+        "rgba": "6f9a3abf0f919ddd20c5dc1e39b197cafc47f14dc726c32c00f77e5a81ae0a57",
+        "margins": "033be745cb18deb042dde0bba0f0fb86f473c0dd27da7e2627ad7a4f90e15bef"
+      },
+      "repeat": {
+        "codes": "d9d2e1b86dbf949dcf3628a45396efe131ccdd7c0d9fcf7f6e3beb197b30f26f",
+        "rgba": "6f9a3abf0f919ddd20c5dc1e39b197cafc47f14dc726c32c00f77e5a81ae0a57",
+        "margins": "033be745cb18deb042dde0bba0f0fb86f473c0dd27da7e2627ad7a4f90e15bef"
+      },
+      "wasm": {
+        "codes": "d9d2e1b86dbf949dcf3628a45396efe131ccdd7c0d9fcf7f6e3beb197b30f26f",
+        "rgba": "6f9a3abf0f919ddd20c5dc1e39b197cafc47f14dc726c32c00f77e5a81ae0a57",
+        "margins": "033be745cb18deb042dde0bba0f0fb86f473c0dd27da7e2627ad7a4f90e15bef"
+      },
+      "gpu": {
+        "codes": "d9d2e1b86dbf949dcf3628a45396efe131ccdd7c0d9fcf7f6e3beb197b30f26f",
+        "rgba": "6f9a3abf0f919ddd20c5dc1e39b197cafc47f14dc726c32c00f77e5a81ae0a57",
+        "margins": "db8bccce235bfd9e2b22d625af0bdf17f4aee458703cfa411100f74979039a2b"
+      },
+      "parity": {
+        "cells": 1024,
+        "finite": 1024,
+        "meanDeltaDb": 0.00015098994481377304,
+        "maxDeltaDb": 0.0043964385986328125,
+        "maskMismatches": 0,
+        "classificationMismatches": 0,
+        "boundaryCells": [],
+        "unexplainedMismatches": 0,
+        "pixelChannels": 0,
+        "pass": true
+      },
+      "wasmParity": {
+        "cells": 1024,
+        "finite": 1024,
+        "meanDeltaDb": 0,
+        "maxDeltaDb": 0,
+        "maskMismatches": 0,
+        "classificationMismatches": 0,
+        "boundaryCells": [],
+        "unexplainedMismatches": 0,
+        "pixelChannels": 0,
+        "pass": true
+      },
+      "counts": [
+        24,
+        224,
+        776,
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "ui": {
+    "gpu": {
+      "coverage": {
+        "on": true,
+        "detail": "low",
+        "status": "done",
+        "backend": "webgpu",
+        "counts": [
+          5187,
+          0,
+          0,
+          11197,
+          0,
+          0
+        ],
+        "progress": {
+          "done": 16384,
+          "total": 16384
+        },
+        "notices": [
+          "backend webgpu: software adapter (forced)"
+        ]
+      },
+      "layer": true,
+      "source": true
+    },
+    "no-gpu": {
+      "coverage": {
+        "on": true,
+        "detail": "low",
+        "status": "done",
+        "backend": "wasm",
+        "counts": [
+          5186,
+          0,
+          0,
+          11198,
+          0,
+          0
+        ],
+        "progress": {
+          "done": 16384,
+          "total": 16384
+        },
+        "notices": [
+          "backend wasm: navigator.gpu unavailable \u2014 WASM core selected"
+        ]
+      },
+      "layer": true,
+      "source": true
+    }
+  },
+  "fallback": {
+    "compilation": {
+      "first": {
+        "backend": "wasm",
+        "notices": [
+          "backend webgpu: hardware adapter",
+          "WebGPU run failed (Error: WebGPU error: Error while parsing WGSL: :1:1 error: unexpected token\ndeliberately invalid WGSL\n^^^^^^^^^^^^\n\n\n - While calling [Device].CreateShaderModule([ShaderModuleDescriptor]).\n); trying the WASM core"
+        ]
+      },
+      "second": {
+        "backend": "wasm",
+        "notices": [
+          "backend wasm: previous WebGPU failure \u2014 WASM core selected"
+        ]
+      },
+      "parity": {
+        "cells": 16384,
+        "finite": 16384,
+        "meanDeltaDb": 4.547473508864641e-13,
+        "maxDeltaDb": 7.450580596923828e-09,
+        "maskMismatches": 0,
+        "classificationMismatches": 0,
+        "boundaryCells": [],
+        "unexplainedMismatches": 0,
+        "pixelChannels": 0,
+        "pass": true
+      },
+      "replay": {
+        "codes": "7412af21d740e6d41acf816ea60e2566f49d67492c26df36cbcc90588c966696",
+        "rgba": "a02e5413c63539a286259631982e7e15cf90d2599cfddecc53e4b35228fa8c1a",
+        "margins": "2c46ddb651a3d4090a9aadefca74ec338f2baf900e3d2213c7cdff4f0a34b26e"
+      },
+      "repeat": {
+        "codes": "7412af21d740e6d41acf816ea60e2566f49d67492c26df36cbcc90588c966696",
+        "rgba": "a02e5413c63539a286259631982e7e15cf90d2599cfddecc53e4b35228fa8c1a",
+        "margins": "2c46ddb651a3d4090a9aadefca74ec338f2baf900e3d2213c7cdff4f0a34b26e"
+      },
+      "deviceRequests": 1
+    },
+    "device-loss": {
+      "first": {
+        "backend": "wasm",
+        "notices": [
+          "backend webgpu: hardware adapter",
+          "WebGPU run failed (Error: device lost); trying the WASM core"
+        ]
+      },
+      "second": {
+        "backend": "wasm",
+        "notices": [
+          "backend wasm: previous WebGPU failure \u2014 WASM core selected"
+        ]
+      },
+      "parity": {
+        "cells": 16384,
+        "finite": 16384,
+        "meanDeltaDb": 4.547473508864641e-13,
+        "maxDeltaDb": 7.450580596923828e-09,
+        "maskMismatches": 0,
+        "classificationMismatches": 0,
+        "boundaryCells": [],
+        "unexplainedMismatches": 0,
+        "pixelChannels": 0,
+        "pass": true
+      },
+      "replay": {
+        "codes": "7412af21d740e6d41acf816ea60e2566f49d67492c26df36cbcc90588c966696",
+        "rgba": "a02e5413c63539a286259631982e7e15cf90d2599cfddecc53e4b35228fa8c1a",
+        "margins": "2c46ddb651a3d4090a9aadefca74ec338f2baf900e3d2213c7cdff4f0a34b26e"
+      },
+      "repeat": {
+        "codes": "7412af21d740e6d41acf816ea60e2566f49d67492c26df36cbcc90588c966696",
+        "rgba": "a02e5413c63539a286259631982e7e15cf90d2599cfddecc53e4b35228fa8c1a",
+        "margins": "2c46ddb651a3d4090a9aadefca74ec338f2baf900e3d2213c7cdff4f0a34b26e"
+      },
+      "deviceRequests": 1
+    }
+  },
+  "sourceSha256": {
+    "apps/web/src/compute/coverage/webgpu.ts": "5b147b080b98afa8b7b5c2cd532832798aca282d7d4111717b91f93e4086ca59",
+    "apps/web/src/compute/coverage/shader.wgsl": "5ddeb53ed3f254d2f5e352011bc6cdf1fe4ae72571d7ef324c892c6b8eae8540",
+    "apps/web/src/compute/coverage/runner.ts": "079a4b9b8906bcc5cd90aa4a397d76bd0e6e7540e14aa3a7e2c6b1bb22d1dfd2",
+    "apps/web/src/compute/coverage/window.ts": "9a07c9fd87772558252caccc1faf04197d75e97ef640bf07186e55c933a6180c",
+    "apps/web/src/compute/coverage/client.ts": "5a8f0b37873417bbf01795e3ef591a84c72f9ebca56788193c969e91088aa7de",
+    "apps/web/src/compute/wasm/coverage-core.ts": "087b9a7e0093d11872035430fca607873ac6f9e25de2cfb581774259f28f8d59",
+    "apps/web/src/map/mapView.ts": "15e8b66f68d1f1e8443d4fc62e6c9a7abae42099915673b2377f5a4b53550e80",
+    "apps/web/src/App.tsx": "2da6829f9c681a8a088bfdabdedef467cb5f455042d33be05aa9134cd23b815b"
+  },
+  "testStats": {
+    "startTime": "2026-10-22T14:57:32.825Z",
+    "duration": 192084.46699999998,
+    "expected": 5,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

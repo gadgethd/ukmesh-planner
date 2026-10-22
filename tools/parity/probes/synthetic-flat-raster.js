@@ -37,7 +37,7 @@
   p[4] = demOriginX; p[5] = demOriginY; p[6] = demW; p[7] = demH;
   p[8] = sp.x - halfPx; p[9] = sp.y - halfPx; p[10] = cellPx; p[11] = OUT; p[12] = OUT;
   p[13] = 22; p[14] = 3; p[15] = 0; p[16] = -124; p[17] = 15; p[18] = 5; p[19] = 100; p[20] = 868;
-  p[21] = 90; p[22] = 24; p[23] = 512; p[24] = 0; p[25] = Number.NaN;
+  p[21] = 90; p[22] = 24; p[23] = 512; p[24] = 0; p[25] = Number.NaN; p[26] = OUT;
   dev.queue.writeBuffer(pB, 0, p);
   const bg = dev.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [
     { binding: 0, resource: { buffer: pB } }, { binding: 1, resource: { buffer: demBuf } },

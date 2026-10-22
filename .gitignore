@@ -35,7 +35,11 @@ playwright-report/
 test-results/
 .e2e-artifacts/
 .tokensave/
+.cache/
 
 # Built WASM artifacts (produced by `npm run build:wasm`)
 apps/web/public/wasm/*.wasm
 apps/web/public/wasm/*.wat
+
+# Short Chromium Unix-socket path, kept inside this worktree
+.t/
