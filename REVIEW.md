@@ -90,7 +90,10 @@ two workers and a 60-second correctness deadline for CPU-heavy fixtures.
 Reproduction/setup: [`tools/webgpu/README.md`](tools/webgpu/README.md).
 Local PNG/JSON artifacts are under `test-results/webgpu/` and benchmark artifacts
 under `test-results/webgpu-benchmark/`. The committed JSON summaries preserve the
-measured evidence. Current CI results are available on the
+measured evidence. Fixture image pulls have a three-attempt registry retry; assertions run once
+after preparation. This handles an observed upstream HTTP 500 pulling Postgres
+on the documentation-only CI run (the implementation run passed all four jobs).
+GitHub rejected a manual retry of that run with HTTP 403. Current CI results are available on the
 [PR checks page](https://github.com/gadgethd/ukmesh-planner/pull/3/checks).
 SQL export/ingest fixtures run in CI's isolated scratch databases; no local live
 database or service was used for verification.
