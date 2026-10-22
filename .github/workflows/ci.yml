@@ -49,3 +49,28 @@ jobs:
         run: npm ci
       - name: Ingest e2e (scratch source + planner databases)
         run: bash fixtures/source/test-ingest.sh
+
+  webgpu-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install (locked)
+        run: npm ci
+      - name: Install Chromium headless shell
+        run: npx playwright install chromium --only-shell
+      - name: Typecheck browser tooling
+        run: npm run typecheck:webgpu
+      - name: Offline WebGPU parity and no-GPU UI
+        run: npm run test:webgpu
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: webgpu-parity
+          path: test-results/webgpu/

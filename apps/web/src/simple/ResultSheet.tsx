@@ -226,7 +226,7 @@ export function ResultSheet(props: Props) {
                 ) : null}
                 {props.coverageState.status === 'done' && props.coverageState.counts ? (
                   <p className="muted small">
-                    Coverage on {props.coverageState.backend === 'webgpu' ? 'GPU (WebGPU)' : 'CPU (fallback)'} in{' '}
+                    Coverage on {props.coverageState.backend === 'webgpu' ? 'GPU (WebGPU)' : props.coverageState.backend === 'wasm' ? 'CPU (WebAssembly)' : 'CPU (JavaScript fallback)'} in{' '}
                     {props.coverageState.elapsedMs !== null ? `${Math.round(props.coverageState.elapsedMs)} ms` : '—'} ·{' '}
                     likely {props.coverageState.counts[0] ?? 0} · marginal {props.coverageState.counts[1] ?? 0} · blocked{' '}
                     {props.coverageState.counts[3] ?? 0} · unknown {props.coverageState.counts[4] ?? 0}

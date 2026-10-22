@@ -108,3 +108,20 @@ describe('wasm coverage core parity vs the CPU oracle', () => {
     expect(codes.size).toBeGreaterThan(1);
   }, 60_000); // heavy integration test (two full 128x128 runs)
 });
+
+it('reuses allocated WASM scratch memory instead of leaking it on every job', async () => {
+  const bytes = readFileSync(new URL('../../../public/wasm/coverage-core.wasm', import.meta.url));
+  const { instance } = await WebAssembly.instantiate(bytes, { env: { abort: () => { throw new Error('abort'); } } });
+  const ex = instance.exports as unknown as { memory: WebAssembly.Memory; allocDem(n: number): number;
+    allocMargins(n: number): number; allocCodes(n: number): number; allocParams(): number };
+  const dem = ex.allocDem(262144), margins = ex.allocMargins(16384), codes = ex.allocCodes(16384), params = ex.allocParams();
+  const byteLength = ex.memory.buffer.byteLength;
+  for (let i = 0; i < 20; i += 1) {
+    expect(ex.allocDem(262144 - i)).toBe(dem); expect(ex.allocMargins(16384)).toBe(margins);
+    expect(ex.allocCodes(16384)).toBe(codes); expect(ex.allocParams()).toBe(params);
+    expect(ex.memory.buffer.byteLength).toBe(byteLength);
+  }
+  // Growth reserves capacity: adjacent window sizes do not allocate repeatedly.
+  const grown = ex.allocDem(262145);
+  expect(ex.allocDem(262146)).toBe(grown);
+});

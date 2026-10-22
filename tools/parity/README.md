@@ -1,5 +1,9 @@
 # Parity + performance tooling
 
+For the self-contained, CI-tested offline suite and fresh tiled-engine
+benchmarks, start with [`../webgpu/README.md`](../webgpu/README.md). The scripts
+below are historical deployment probes and still require staging access.
+
 Scripts used to verify the WebGPU coverage kernel against the CPU oracle (the
 shared TypeScript core) and to measure performance. See
 `docs/rf/parity-fixtures.md` for the results and the boundary-exception

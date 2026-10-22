@@ -3,10 +3,9 @@
  * passes the real `navigator.gpu`.
  *
  * Policy: WebGPU is used for hardware adapters only. Software adapters
- * (SwiftShader/lavapipe/llvmpipe) measured comparable to the WASM core for
- * this workload (1.9 s vs 2.3 s at 128x128 — docs/performance/benchmarks.md);
- * the WASM core is selected for them anyway because it is parity-verified
- * and does not depend on software-WebGPU support varying by browser.
+ * (SwiftShader/lavapipe/llvmpipe) use WASM for reproducibility and portability
+ * across browsers, irrespective of forced-adapter benchmark speed. See
+ * docs/performance/benchmarks.md for both current and historical measurements.
  * Anything without a usable hardware adapter gets the WASM core; the JS CPU
  * core (the parity oracle) is the fallback of last resort when the WASM
  * asset cannot run, and can be forced explicitly by the parity tooling.
@@ -36,7 +35,8 @@ export interface BackendChoice<TDevice = DeviceLike> {
   device?: TDevice;
 }
 
-const SOFTWARE_HINT = /swiftshader|llvmpipe|lavapipe|softpipe|software|mesa\b/i;
+// Mesa also drives real Intel/AMD GPUs; only its software rasterizers belong here.
+const SOFTWARE_HINT = /swiftshader|llvmpipe|lavapipe|softpipe|software/i;
 
 export function isSoftwareAdapter(adapter: Pick<AdapterLike, 'isFallbackAdapter' | 'info'>): boolean {
   if (adapter.isFallbackAdapter === true) return true;

@@ -69,6 +69,11 @@ export class WasmCoverageCore {
   run(input: WasmRunInput): { margins: Float32Array; codes: Uint8Array; counts: number[] } {
     const { geometry, rf, dem, site } = input;
     const total = geometry.width * geometry.height;
+    if (![geometry.width, geometry.height, dem.width, dem.height].every((v) => Number.isSafeInteger(v) && v > 0)
+        || geometry.width > 512 || geometry.height > 512 || dem.width * dem.height !== dem.data.length
+        || dem.data.byteLength > 96 * 1024 * 1024) {
+      throw new Error('WASM coverage dimensions exceed the bounded preview budget');
+    }
 
     // Allocate everything up-front; runBand does not allocate, so the views
     // below stay valid for the whole run.

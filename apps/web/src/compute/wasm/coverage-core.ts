@@ -52,19 +52,36 @@ const slerpOut: Float64Array = new Float64Array(2);
 // 21 targetSpacingM 22 minSamples 23 maxSamples
 
 export function allocDem(len: i32): usize {
-  dem = new Float32Array(len);
+  if (len < 1 || len > 96 * 1024 * 1024 / 4) unreachable();
+  // Geometric growth bounds abandoned allocations under the stub runtime.
+  // Without it, a sequence of slightly larger windows would leak every arena.
+  if (dem.length < len) {
+    let capacity = max(1, dem.length);
+    while (capacity < len) capacity = min(capacity * 2, 96 * 1024 * 1024 / 4);
+    dem = new Float32Array(capacity);
+  }
   return dem.dataStart;
 }
 export function allocMargins(len: i32): usize {
-  outMargins = new Float32Array(len);
+  if (len < 1 || len > 512 * 512) unreachable();
+  if (outMargins.length < len) {
+    let capacity = max(1, outMargins.length);
+    while (capacity < len) capacity *= 2;
+    outMargins = new Float32Array(capacity);
+  }
   return outMargins.dataStart;
 }
 export function allocCodes(len: i32): usize {
-  outCodes = new Uint8Array(len);
+  if (len < 1 || len > 512 * 512) unreachable();
+  if (outCodes.length < len) {
+    let capacity = max(1, outCodes.length);
+    while (capacity < len) capacity *= 2;
+    outCodes = new Uint8Array(capacity);
+  }
   return outCodes.dataStart;
 }
 export function allocParams(): usize {
-  params = new Float64Array(24);
+  if (params.length == 0) params = new Float64Array(24);
   return params.dataStart;
 }
 

@@ -334,7 +334,8 @@ export function App() {
   const runCoverage = useCallback(
     (s: SiteState) => {
       const client = coverageClientRef.current;
-      if (!client) return;
+      if (!client || document.hidden) return;
+      void viewRef.current?.setCoverage(null);
       setCoverageState((prev) => ({ ...prev, status: 'running', progress: null, error: null }));
       const handle = client.start(
         {
@@ -383,6 +384,26 @@ export function App() {
     runCoverageRef.current = runCoverage;
   }, [runCoverage]);
 
+  useEffect(() => {
+    const onVisibility = (): void => {
+      if (document.hidden) {
+        coverageJobRef.current = 0;
+        coverageClientRef.current?.cancel();
+        if (coverageOnRef.current) {
+          void viewRef.current?.setCoverage(null);
+          setCoverageState((prev) => ({
+            ...prev, status: 'idle', progress: null,
+            notices: ['Coverage paused while this tab is hidden; it resumes when you return.'],
+          }));
+        }
+      } else if (coverageOnRef.current && siteRef.current) {
+        runCoverageRef.current(siteRef.current);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
+
   const applySite = useCallback(
     (next: SiteState, opts: { pushUndo: boolean; debounced: boolean; moveMarker: boolean }) => {
       const prev = siteRef.current;
@@ -420,6 +441,7 @@ export function App() {
     viewRef.current?.setPlannedSite(null);
     viewRef.current?.setLinks3D([]);
     coverageJobRef.current = 0; // discard in-flight coverage
+    coverageClientRef.current?.cancel();
     void viewRef.current?.setCoverage(null);
     setCoverageState({ status: 'idle', progress: null, backend: null, counts: null, elapsedMs: null, notices: [], error: null });
   }, []);
@@ -941,6 +963,7 @@ export function App() {
             if (cur) runCoverage(cur);
           } else {
             coverageJobRef.current = 0;
+            coverageClientRef.current?.cancel();
             void viewRef.current?.setCoverage(null);
             setCoverageState({ status: 'idle', progress: null, backend: null, counts: null, elapsedMs: null, notices: [], error: null });
           }

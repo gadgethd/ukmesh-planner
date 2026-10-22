@@ -7,7 +7,7 @@
     "typecheck": "tsc --noEmit",
     "build": "vite build",
     "dev": "vite",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run --passWithNoTests --maxWorkers=2 --testTimeout=60000",
     "build:wasm": "asc src/compute/wasm/coverage-core.ts --config asconfig.json --target release",
     "prebuild": "npm run build:wasm",
     "pretest": "npm run build:wasm"

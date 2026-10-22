@@ -3,7 +3,7 @@
  * callers keep only the newest job's results (a moved site supersedes
  * in-flight work without blocking the UI).
  */
-import type { CoverageJobRequest } from './coverage.worker.js';
+import type { CoverageJobRequest } from './protocol.js';
 import type { CoverageGeometry, CoverageDetail } from './params.js';
 
 export interface CoverageProgressMessage {
@@ -18,6 +18,8 @@ export interface CoverageResultMessage {
   type: 'coverage-result';
   jobId: number;
   backend: 'webgpu' | 'wasm' | 'cpu';
+  modelVersion: string;
+  terrainRevision: string;
   geometry: CoverageGeometry;
   margins: Float32Array;
   codes: Uint8Array;
@@ -32,16 +34,16 @@ export interface CoverageHandle {
 }
 
 export class CoverageClient {
-  private readonly worker: Worker;
+  private worker: Worker | null = null;
   private nextJob = 0;
   private pending = new Map<
     number,
     { resolve: (r: CoverageResultMessage) => void; reject: (e: Error) => void; onProgress?: (p: CoverageProgressMessage) => void }
   >();
 
-  constructor() {
-    this.worker = new Worker(new URL('./coverage.worker.ts', import.meta.url), { type: 'module' });
-    this.worker.onmessage = (
+  private createWorker(): Worker {
+    const worker = new Worker(new URL('./coverage.worker.ts', import.meta.url), { type: 'module' });
+    worker.onmessage = (
       ev: MessageEvent<CoverageResultMessage | CoverageProgressMessage | { type: 'coverage-error'; jobId: number; error: string }>,
     ) => {
       const msg = ev.data;
@@ -55,11 +57,15 @@ export class CoverageClient {
       if (msg.type === 'coverage-error') entry.reject(new Error(msg.error));
       else entry.resolve(msg);
     };
-    this.worker.onerror = (ev) => {
+    worker.onerror = (ev) => {
+      if (this.worker !== worker) return; // late event from cancelled work
       const err = new Error(ev.message || 'coverage worker error');
       for (const [, entry] of this.pending) entry.reject(err);
       this.pending.clear();
+      worker.terminate();
+      if (this.worker === worker) this.worker = null;
     };
+    return worker;
   }
 
   start(
@@ -71,6 +77,10 @@ export class CoverageClient {
     },
     onProgress?: (p: CoverageProgressMessage) => void,
   ): CoverageHandle {
+    // Terminating a busy worker cancels synchronous WASM/CPU work as well as
+    // GPU dispatches. An idle worker retains its device/pipeline/terrain cache.
+    if (this.pending.size > 0) this.cancel();
+    this.worker ??= this.createWorker();
     this.nextJob += 1;
     const jobId = this.nextJob;
     const done = new Promise<CoverageResultMessage>((resolve, reject) => {
@@ -81,8 +91,15 @@ export class CoverageClient {
     return { jobId, done };
   }
 
-  terminate(): void {
-    this.worker.terminate();
+  cancel(): void {
+    const worker = this.worker;
+    this.worker = null;
+    worker?.terminate();
+    for (const entry of this.pending.values()) entry.reject(new DOMException('Coverage cancelled', 'AbortError'));
     this.pending.clear();
+  }
+
+  terminate(): void {
+    this.cancel();
   }
 }

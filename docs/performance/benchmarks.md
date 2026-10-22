@@ -1,5 +1,67 @@
 # Benchmarks and measured performance
 
+## Current offline tiled engine — 2026-10-22
+
+Measured locally on an AMD Ryzen 7 5825U development VM (10 logical CPUs,
+16 GiB RAM), Linux x86_64, Headless Chromium 153, Google SwiftShader software
+WebGPU. The shared host's concurrent load was not controlled. Each backend ran
+serially, with one warm-up and three measured runs per case; the table gives
+medians. Raw samples, device limits, every classification boundary cell and
+numerical summaries are in [`webgpu-2026-10-22.json`](webgpu-2026-10-22.json).
+
+| Square | DEM tiles | Output cells | GPU bands | CPU (ms) | WASM (ms) | WebGPU (ms) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 10 km | 9 | 128² / 16,384 | 2 | 378.8 | 240.8 | 106.3 |
+| 25 km | 36 | 256² / 65,536 | 8 | 4,970.1 | 5,945.9 | 1,541.1 |
+| 50 km | 110 | 512² / 262,144 | 32 | 40,935.2 | 25,327.9 | 11,456.2 |
+
+All cases use the deterministic unequal-hills DEM, without a deployed service.
+Times include GPU upload, per-band dispatch/readback and cleanup, or CPU/WASM
+kernel execution. They exclude input generation, terrain fetching and initial
+shader/module compilation. These are software-adapter observations under a
+shared host's load; they do not establish hardware-GPU or mobile performance.
+The older real-terrain timings below use different inputs and methodology.
+
+The GPU uses one DEM storage buffer, two output storage buffers and one uniform
+buffer. Each output/readback buffer is at most 32 KiB (8,192 cells), independent
+of final raster size. A dispatch covers at most 8,192 output cells / 64 rows;
+rows shrink with output width and actual device limits. The DEM ceiling is
+96 MiB, further restricted by device storage/buffer limits; output is capped
+at 512×512. Buffers are released even on partial allocation or readback failure.
+
+| Output | Mean GPU margin error (dB) | Max error (dB) | Class changes | Unknown/range mask changes |
+| --- | ---: | ---: | ---: | ---: |
+| 128² | 0.157831 | 12.1451 | 25 / 16,384 (0.153%) | 0 |
+| 256² | 0.095474 | 12.1574 | 48 / 65,536 (0.073%) | 0 |
+| 512² | 0.051837 | 12.1617 | 71 / 262,144 (0.027%) | 0 |
+
+All cases pass the existing mean-error/classification/boundary gate below.
+WASM classifications match CPU exactly, with maximum margin differences below
+0.000002 dB in these runs. Isolated GPU margin errors are larger than the mean,
+consistent with approximately two knife-edge inclusion steps near grazing
+geometry (an inference from the measured deltas and historical boundary analysis);
+**0.3 dB is a mean-error limit, not a per-cell guarantee**. The checked-in raw
+report includes these maxima and every changed classification. See the nine
+fixed reference-render fixtures in [`../rf/parity-fixtures.md`](../rf/parity-fixtures.md).
+
+Hardware adapters are auto-selected for WebGPU. No API/adapter, a software
+adapter, or adapter/device request failure selects WASM. Software adapters remain
+on WASM by default for portability and reproducibility, even though forced
+SwiftShader was faster here; the test-only force explicitly exercises WGSL.
+GPU compile/validation/OOM/limit/device-loss failure destroys the device and
+replays the same frozen DEM, site, RF and geometry on WASM. Further jobs avoid
+retrying that broken GPU until a new worker or explicit backend mode change.
+WASM preserves requested detail; if it cannot run, JS CPU defaults to 128² with
+an explicit reduction notice. No backend sends RF work to the VPS. Hidden tabs
+cancel coverage and discard the overlay; returning recomputes the current input.
+
+Reproduce with `npm run test:webgpu` and `npm run benchmark:webgpu`; setup,
+assumptions and browser overrides are in [`../../tools/webgpu/README.md`](../../tools/webgpu/README.md).
+Validation errors need explicit asynchronous error scopes; this follows the
+[WebGPU error model](https://gpuweb.github.io/gpuweb/explainer/#error-scopes).
+
+## Historical staging measurements (before the 2026-10-22 changes)
+
 All numbers below were measured during Stage 4 (browser WebGPU path +
 correctness) on the staging deployment (VPS container, app served over an SSH
 tunnel) with a headless Chromium **software** WebGPU adapter (SwiftShader).

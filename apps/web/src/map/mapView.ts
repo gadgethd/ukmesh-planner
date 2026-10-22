@@ -92,6 +92,7 @@ export class MapView {
   private theme: Theme = 'light';
   /** True while the built-in minimal style is displayed (no remote basemap). */
   private styleIsFallback = true;
+  private coverageRevision = 0;
 
   constructor(
     container: HTMLElement,
@@ -420,6 +421,7 @@ export class MapView {
   async setCoverage(
     data: { bounds: [number, number, number, number]; width: number; height: number; codes: Uint8Array } | null,
   ): Promise<void> {
+    const revision = ++this.coverageRevision;
     if (!data) {
       if (this.map.getLayer('coverage-raster')) this.map.removeLayer('coverage-raster');
       if (this.map.getSource('coverage')) this.map.removeSource('coverage');
@@ -451,6 +453,7 @@ export class MapView {
       [bounds[0], bounds[1]],
     ];
     const applied = await this.withStyleReady(() => {
+      if (revision !== this.coverageRevision) return;
       const src = this.map.getSource('coverage') as
         | { updateImage?: (o: { url: string; coordinates: Array<[number, number]> }) => void }
         | undefined;
@@ -478,7 +481,7 @@ export class MapView {
         );
       }
     });
-    if (!applied) {
+    if (!applied && revision === this.coverageRevision) {
       // Style never became ready — drop the source/layer so a later update
       // starts clean.
       if (this.map.getLayer('coverage-raster')) this.map.removeLayer('coverage-raster');

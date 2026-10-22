@@ -1,177 +1,24 @@
-/**
- * Coverage worker — Tier B regional coverage (bounded 50x50 km preview).
- *
- * Backend selection: WebGPU for hardware adapters; the shared CPU core (the
- * parity oracle) otherwise, at reduced detail with a clear notice. Any GPU
- * failure (compile, limits, device loss) re-runs the same input on the CPU
- * core. Nothing here ever touches the VPS.
- */
-import type { RfSettings } from '@ukmesh-planner/contracts';
-import { chooseCoverageBackend, type GpuLike } from './select.js';
-import { WebGpuCoverageEngine, CoverageGpuError } from './webgpu.js';
-import { runCoverageCpu } from './kernel-cpu.js';
-import { WasmCoverageCore } from '../wasm/backend.js';
-import { coverageGeometry, COVERAGE_DETAILS, type CoverageDetail } from './params.js';
-import { TerrariumTileProvider } from '../terrain-provider.js';
+/** All regional compute stays in this worker; the server only serves data. */
+import { CoverageRunner } from './runner.js';
+import type { CoverageJobRequest } from './protocol.js';
+import type { GpuLike } from './select.js';
 
-export interface CoverageJobRequest {
-  type: 'coverage';
-  jobId: number;
-  site: { lat: number; lon: number; antennaHeightAglM: number };
-  detail: CoverageDetail;
-  rf: RfSettings;
-  forceBackend?: 'webgpu' | 'wasm' | 'cpu' | null;
-  /** CPU fallback resolution ceiling (cells per side; default 128). */
-  cpuMaxResolution?: number;
-}
-
-const CPU_CEILING = 128;
-const provider = new TerrariumTileProvider();
-const post = (m: unknown, transfer?: Transferable[]): void => {
-  (self as unknown as { postMessage(msg: unknown, t?: Transferable[]): void }).postMessage(m, transfer);
+const runner = new CoverageRunner((navigator as unknown as { gpu?: GpuLike }).gpu);
+const post = (msg: unknown, transfer: Transferable[] = []): void => {
+  (self as unknown as { postMessage(msg: unknown, t: Transferable[]): void }).postMessage(msg, transfer);
 };
-
+// A direct worker consumer gets backpressure too: error scopes, DEM snapshots
+// and the WASM scratch memory are never shared by overlapping runs.
+let queue = Promise.resolve();
 self.onmessage = (ev: MessageEvent<CoverageJobRequest>) => {
-  if (ev.data?.type === 'coverage') void handle(ev.data);
+  if (ev.data?.type !== 'coverage') return;
+  const req = ev.data;
+  queue = queue.then(async () => {
+    try {
+      const out = await runner.run(req, (p) => post(p));
+      post(out, [out.margins.buffer, out.codes.buffer]);
+    } catch (err) {
+      post({ type: 'coverage-error', jobId: req.jobId, error: err instanceof Error ? err.message : String(err) });
+    }
+  });
 };
-
-async function handle(req: CoverageJobRequest): Promise<void> {
-  const t0 = performance.now();
-  try {
-    const notices: string[] = [];
-    const gpu = (navigator as unknown as { gpu?: GpuLike }).gpu;
-    const choice = (await chooseCoverageBackend(gpu, { force: req.forceBackend ?? null })) as {
-      backend: 'webgpu' | 'cpu';
-      reason: string;
-      device?: GPUDevice;
-    };
-    notices.push(`backend ${choice.backend}: ${choice.reason}`);
-
-    if (choice.backend === 'webgpu' && choice.device) {
-      try {
-        const gpuOut = await runGpu(req, choice.device, notices);
-        post(
-          { type: 'coverage-result', jobId: req.jobId, backend: 'webgpu', ...gpuOut, elapsedMs: performance.now() - t0, notices },
-          [gpuOut.margins.buffer, gpuOut.codes.buffer],
-        );
-        return;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        notices.push(`WebGPU run failed (${msg}); trying the WASM core`);
-        if (!(err instanceof Error)) throw err;
-      }
-    }
-
-    // WASM tier (Tier B fallback). Skipped only when the CPU core is forced.
-    if (choice.backend !== 'cpu') {
-      try {
-        const wasmOut = await runWasm(req, notices);
-        post(
-          { type: 'coverage-result', jobId: req.jobId, backend: 'wasm', ...wasmOut, elapsedMs: performance.now() - t0, notices },
-          [wasmOut.margins.buffer, wasmOut.codes.buffer],
-        );
-        return;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        notices.push(`WASM run failed (${msg}); re-running on the CPU core`);
-      }
-    }
-
-    // CPU path (bounded resolution, clear notice when reduced).
-    let detail: CoverageDetail = req.detail;
-    const ceiling = req.cpuMaxResolution ?? CPU_CEILING;
-    if (COVERAGE_DETAILS[detail] > ceiling) {
-      detail = ceiling <= 128 ? 'low' : 'medium';
-      notices.push(
-        `CPU fallback computes at reduced detail (${COVERAGE_DETAILS[detail]} cells vs ${COVERAGE_DETAILS[req.detail]} requested)`,
-      );
-    }
-    const geometry = coverageGeometry(req.site, detail);
-    const out = await runCoverageCpu({
-      site: req.site,
-      geometry,
-      rf: req.rf,
-      provider,
-      onProgress: (done, total) => post({ type: 'coverage-progress', jobId: req.jobId, done, total, backend: 'cpu' }),
-    });
-    post(
-      {
-        type: 'coverage-result',
-        jobId: req.jobId,
-        backend: 'cpu',
-        geometry,
-        margins: out.margins,
-        codes: out.codes,
-        counts: out.counts,
-        elapsedMs: performance.now() - t0,
-        notices,
-      },
-      [out.margins.buffer, out.codes.buffer],
-    );
-  } catch (err) {
-    post({ type: 'coverage-error', jobId: req.jobId, error: err instanceof Error ? err.message : String(err) });
-  }
-}
-
-let wasmCorePromise: Promise<WasmCoverageCore> | null = null;
-function getWasmCore(): Promise<WasmCoverageCore> {
-  if (!wasmCorePromise) {
-    wasmCorePromise = WasmCoverageCore.load();
-    // Allow a retry on the next job if the asset failed to load once.
-    wasmCorePromise.catch(() => {
-      wasmCorePromise = null;
-    });
-  }
-  return wasmCorePromise;
-}
-
-async function runWasm(
-  req: CoverageJobRequest,
-  _notices: string[],
-): Promise<{ geometry: ReturnType<typeof coverageGeometry>; margins: Float32Array; codes: Uint8Array; counts: number[] }> {
-  const geometry = coverageGeometry(req.site, req.detail);
-  await provider.warmPoint(req.site);
-  const siteElev = provider.elevationAt(req.site);
-  if (siteElev === null) throw new Error('site terrain unknown (CPU path reports per-cell unknown)');
-  const dem = await provider.windowRaster(
-    { x: geometry.centerPx.x - geometry.halfPx, y: geometry.centerPx.y - geometry.halfPx },
-    { x: geometry.centerPx.x + geometry.halfPx, y: geometry.centerPx.y + geometry.halfPx },
-  );
-  if (!dem) throw new Error('DEM window exceeds the memory budget');
-  const core = await getWasmCore();
-  const out = core.run({
-    site: req.site,
-    geometry,
-    rf: req.rf,
-    siteTopM: siteElev + req.site.antennaHeightAglM,
-    dem,
-    onProgress: (done, total) => post({ type: 'coverage-progress', jobId: req.jobId, done, total, backend: 'wasm' }),
-  });
-  return { geometry, margins: out.margins, codes: out.codes, counts: out.counts };
-}
-
-async function runGpu(
-  req: CoverageJobRequest,
-  device: GPUDevice,
-  _notices: string[],
-): Promise<{ geometry: ReturnType<typeof coverageGeometry>; margins: Float32Array; codes: Uint8Array; counts: number[] }> {
-  const geometry = coverageGeometry(req.site, req.detail);
-  await provider.warmPoint(req.site);
-  const siteElev = provider.elevationAt(req.site);
-  if (siteElev === null) throw new CoverageGpuError('site terrain unknown (CPU path reports per-cell unknown)');
-  const dem = await provider.windowRaster(
-    { x: geometry.centerPx.x - geometry.halfPx, y: geometry.centerPx.y - geometry.halfPx },
-    { x: geometry.centerPx.x + geometry.halfPx, y: geometry.centerPx.y + geometry.halfPx },
-  );
-  if (!dem) throw new CoverageGpuError('DEM window exceeds the memory budget');
-  const engine = new WebGpuCoverageEngine(device, '');
-  const out = await engine.run({
-    site: req.site,
-    geometry,
-    rf: req.rf,
-    siteTopM: siteElev + req.site.antennaHeightAglM,
-    dem,
-    onProgress: (done, total) => post({ type: 'coverage-progress', jobId: req.jobId, done, total, backend: 'webgpu' }),
-  });
-  return { geometry, margins: out.margins, codes: out.codes, counts: out.counts };
-}
